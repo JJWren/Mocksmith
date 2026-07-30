@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Mocksmith.Components;
 using Mocksmith.Core.Data;
+using Mocksmith.Core.Generation;
 using Mocksmith.Core.Security;
 using Mocksmith.Core.Services;
 
@@ -39,6 +40,29 @@ builder.Services.AddSingleton(new MocksmithDataOptions { RootPath = dataDirector
 builder.Services.AddSingleton<SampleFileStore>();
 builder.Services.AddScoped<SampleQueryService>();
 builder.Services.AddScoped<SampleImportService>();
+
+// Generation backend selection per issue #13: explicit MOCKSMITH_GENERATOR wins,
+// otherwise auto-detect from available credentials (API key > OAuth token / local CLI).
+var anthropicApiKey = builder.Configuration["ANTHROPIC_API_KEY"];
+var generationBackend = GeneratorSelector.Resolve(
+    builder.Configuration["MOCKSMITH_GENERATOR"],
+    hasApiKey: !string.IsNullOrWhiteSpace(anthropicApiKey),
+    hasOauthToken: !string.IsNullOrWhiteSpace(builder.Configuration["CLAUDE_CODE_OAUTH_TOKEN"]),
+    cliOnPath: GeneratorSelector.IsCliOnPath());
+builder.Services.AddSingleton(new GenerationOptions { Backend = generationBackend });
+builder.Services.AddSingleton<IDesignGenerator>(services => generationBackend switch
+{
+    GeneratorSelector.Api => new ClaudeApiGenerator(anthropicApiKey
+        ?? throw new InvalidOperationException("MOCKSMITH_GENERATOR=api requires ANTHROPIC_API_KEY.")),
+    GeneratorSelector.ClaudeCode => new ClaudeCodeCliGenerator(
+        services.GetRequiredService<MocksmithDataOptions>(),
+        builder.Configuration["MOCKSMITH_CLAUDE_CLI"],
+        int.TryParse(builder.Configuration["MOCKSMITH_GENERATION_TIMEOUT_SECONDS"], out var generationTimeout)
+            ? generationTimeout
+            : 600),
+    _ => new DisabledDesignGenerator(),
+});
+builder.Services.AddScoped<DraftSessionService>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -98,6 +122,28 @@ app.MapGet("/samples/{id:guid}/file", async Task<IResult> (
     context.Response.Headers.ContentSecurityPolicy =
         "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:;";
     var html = await files.ReadTextAsync(sample.HtmlFile);
+    return Results.Content(html, "text/html");
+}).RequireAuthorization()
+  .WithMetadata(new SkipStatusCodePagesAttribute());
+
+// Draft iteration previews, served under the same sandbox/CSP rules as samples.
+app.MapGet("/sessions/{sessionId:guid}/iterations/{iterationId:guid}/file", async Task<IResult> (
+    Guid sessionId,
+    Guid iterationId,
+    HttpContext context,
+    MocksmithDbContext db,
+    SampleFileStore files) =>
+{
+    var iteration = await db.DraftIterations.AsNoTracking()
+        .FirstOrDefaultAsync(i => i.Id == iterationId && i.DraftSessionId == sessionId);
+    if (iteration is null || !files.Exists(iteration.HtmlFile))
+    {
+        return Results.NotFound();
+    }
+
+    context.Response.Headers.ContentSecurityPolicy =
+        "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:;";
+    var html = await files.ReadTextAsync(iteration.HtmlFile);
     return Results.Content(html, "text/html");
 }).RequireAuthorization()
   .WithMetadata(new SkipStatusCodePagesAttribute());

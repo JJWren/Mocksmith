@@ -12,6 +12,27 @@ public class SampleFileStore(MocksmithDataOptions options)
 
     public string SampleHtmlRelativePath(Guid sampleId) => $"samples/{sampleId}/sample.html";
 
+    public string SessionIterationRelativePath(Guid sessionId, int index) => $"sessions/{sessionId}/iter-{index}.html";
+
+    public string AssetRelativePath(Guid assetId, string extension) => $"assets/{assetId}.{extension.TrimStart('.')}";
+
+    public async Task WriteTextAsync(string relativePath, string text, CancellationToken ct = default)
+    {
+        var absolute = ResolveAbsolute(relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
+        await File.WriteAllTextAsync(absolute, text, ct);
+    }
+
+    public async Task WriteBytesAsync(string relativePath, byte[] data, CancellationToken ct = default)
+    {
+        var absolute = ResolveAbsolute(relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(absolute)!);
+        await File.WriteAllBytesAsync(absolute, data, ct);
+    }
+
+    public Task<byte[]> ReadBytesAsync(string relativePath, CancellationToken ct = default)
+        => File.ReadAllBytesAsync(ResolveAbsolute(relativePath), ct);
+
     public async Task<string> WriteSampleHtmlAsync(Guid sampleId, string html, CancellationToken ct = default)
     {
         var relative = SampleHtmlRelativePath(sampleId);

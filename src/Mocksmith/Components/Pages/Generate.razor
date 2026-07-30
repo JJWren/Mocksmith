@@ -1,0 +1,188 @@
+@page "/generate"
+@using Microsoft.EntityFrameworkCore
+@using Mocksmith.Core.Data
+@using Mocksmith.Core.Generation
+@using Mocksmith.Core.Services
+@inject DraftSessionService Sessions
+@inject GenerationOptions Generation
+@inject IDbContextFactory<MocksmithDbContext> ContextFactory
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<PageTitle>Generate — Mocksmith</PageTitle>
+
+<div class="generate-page" id="generate-page">
+    <h1>Generate a sample</h1>
+
+    @if (Generation.Backend is null)
+    {
+        <div class="setup-banner">
+            <h2>No generation backend configured</h2>
+            <p>
+                Set <code>ANTHROPIC_API_KEY</code> to generate via the Claude API, or provide
+                <code>CLAUDE_CODE_OAUTH_TOKEN</code> (from <code>claude setup-token</code>) /
+                install the <code>claude</code> CLI to generate on your Claude subscription.
+                <code>MOCKSMITH_GENERATOR=api|claude-code</code> overrides auto-detection.
+            </p>
+            <p>You can still <a href="/import">import samples</a> produced elsewhere.</p>
+        </div>
+    }
+    else
+    {
+        <p class="muted">
+            Backend: <strong>@Generation.Backend</strong>@(Generation.Backend == "claude-code" ? " (subscription)" : "")
+            — paste screenshots straight from the clipboard (Ctrl+V).
+        </p>
+
+        <div class="import-form">
+            <label>
+                What are you looking for?
+                <textarea @bind="_description" rows="4"
+                          placeholder="A brutalist analytics dashboard with a warm accent; dense data tables; dark."></textarea>
+            </label>
+
+            <label>
+                Reference screenshots <span class="muted">(paste anywhere on this page, or pick files)</span>
+                <InputFile OnChange="OnFilesSelectedAsync" accept="image/*" multiple />
+            </label>
+
+            @if (_screenshots.Count > 0)
+            {
+                <div class="shot-strip">
+                    @for (var i = 0; i < _screenshots.Count; i++)
+                    {
+                        var index = i;
+                        var shot = _screenshots[index];
+                        <div class="shot-thumb">
+                            <img src="data:@shot.MediaType;base64,@Convert.ToBase64String(shot.Data)" alt="@shot.FileName" />
+                            <button type="button" title="Remove" @onclick="() => _screenshots.RemoveAt(index)">×</button>
+                        </div>
+                    }
+                </div>
+            }
+
+            <label>
+                Source URL <span class="muted">(optional provenance; also given to the model for style signal)</span>
+                <input @bind="_sourceUrl" type="url" placeholder="https://example.com" />
+            </label>
+
+            <div class="request-row">
+                <label>
+                    Model
+                    <select @bind="_model">
+                        @foreach (var model in ModelPricing.SupportedModels)
+                        {
+                            <option value="@model">@model</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    Directions
+                    <select @bind="_fanOut">
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                    </select>
+                </label>
+            </div>
+
+            @if (_error is not null)
+            {
+                <p class="form-error" role="alert">@_error</p>
+            }
+
+            <button type="button" @onclick="SubmitAsync" disabled="@_busy">
+                @(_busy ? "Starting…" : "Generate")
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    private const long MaxImageBytes = 5 * 1024 * 1024;
+
+    private string _description = "";
+    private string _sourceUrl = "";
+    private string _model = "claude-sonnet-5";
+    private int _fanOut = 1;
+    private readonly List<ScreenshotInput> _screenshots = [];
+    private string? _error;
+    private bool _busy;
+    private DotNetObjectReference<Generate>? _selfReference;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await ContextFactory.CreateDbContextAsync();
+        var settings = await db.Settings.AsNoTracking().FirstOrDefaultAsync();
+        if (settings is not null)
+        {
+            _model = settings.DefaultModel;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Generation.Backend is not null)
+        {
+            _selfReference = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("mocksmithPaste.init", _selfReference, "generate-page");
+        }
+    }
+
+    [JSInvokable]
+    public Task OnPasteImage(string base64, string mediaType, string fileName)
+    {
+        _screenshots.Add(new ScreenshotInput(fileName, mediaType, Convert.FromBase64String(base64)));
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnFilesSelectedAsync(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        foreach (var file in e.GetMultipleFiles(6))
+        {
+            if (file.Size > MaxImageBytes)
+            {
+                _error = $"{file.Name} is larger than 5 MB.";
+                continue;
+            }
+
+            using var stream = new MemoryStream();
+            await file.OpenReadStream(MaxImageBytes).CopyToAsync(stream);
+            _screenshots.Add(new ScreenshotInput(file.Name, file.ContentType, stream.ToArray()));
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _error = null;
+        _busy = true;
+        try
+        {
+            var session = await Sessions.StartSessionAsync(_description, _sourceUrl, _model, _screenshots);
+            Navigation.NavigateTo($"/sessions/{session.Id}?fanout={_fanOut}");
+        }
+        catch (ArgumentException ex)
+        {
+            _error = ex.Message;
+            _busy = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("mocksmithPaste.dispose");
+        }
+        catch (JSDisconnectedException)
+        {
+            // circuit already gone; the browser context (and its listener) is too
+        }
+        finally
+        {
+            _selfReference?.Dispose();
+        }
+    }
+}

@@ -1,0 +1,330 @@
+@page "/sessions/{SessionId:guid}"
+@using System.Text.Json
+@using Mocksmith.Core.Entities
+@using Mocksmith.Core.Generation
+@using Mocksmith.Core.Services
+@inject DraftSessionService Sessions
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Draft session — Mocksmith</PageTitle>
+
+@if (_session is null)
+{
+    <p class="muted">@(_loaded ? "Session not found." : "Loading…")</p>
+}
+else
+{
+    <div class="session-page">
+        <aside class="session-sidebar">
+            <h2>Iterations</h2>
+            @if (_session.Iterations.Count == 0 && !_generating)
+            {
+                <p class="muted">None yet.</p>
+            }
+            <ul>
+                @foreach (var iteration in _session.Iterations.OrderBy(i => i.Index))
+                {
+                    <li>
+                        <button type="button"
+                                class="iteration-item @(iteration.Id == _selectedId ? "iteration-on" : "")"
+                                @onclick="() => SelectAsync(iteration.Id)">
+                            <span class="iteration-title">
+                                #@iteration.Index @(iteration.InstructionText is null ? $"· candidate {(char)('A' + iteration.CandidateGroup)}" : "· refine")
+                            </span>
+                            <span class="iteration-sub">
+                                @(iteration.InstructionText ?? iteration.Name ?? "")
+                            </span>
+                        </button>
+                    </li>
+                }
+            </ul>
+            <div class="session-meta muted">
+                <div>Model: @_session.Model</div>
+                @if (_session.SourceUrl is not null)
+                {
+                    <div>Source: @_session.SourceUrl</div>
+                }
+            </div>
+        </aside>
+
+        <section class="session-main">
+            <div class="session-toolbar">
+                <input class="refine-input"
+                       placeholder="Refine: e.g. darker header, more whitespace, serif headings…"
+                       @bind="_refineText"
+                       @bind:event="oninput"
+                       disabled="@(_generating || _selectedId is null)" />
+                <button type="button" @onclick="RefineAsync" disabled="@(_generating || _selectedId is null || string.IsNullOrWhiteSpace(_refineText))">
+                    Refine
+                </button>
+                <button type="button" class="save-button" @onclick="OpenSaveDialog" disabled="@(_generating || _selectedId is null)">
+                    Save as sample…
+                </button>
+            </div>
+
+            @if (_generating)
+            {
+                <div class="generation-status">
+                    <div class="spinner"></div>
+                    <span>@(_phase ?? "generating…") · @(_elapsed)s</span>
+                </div>
+            }
+            @if (_error is not null)
+            {
+                <p class="form-error" role="alert">@_error</p>
+            }
+
+            @if (_selectedId is { } selected)
+            {
+                <div class="session-preview">
+                    <iframe title="Draft preview"
+                            src="/sessions/@SessionId/iterations/@selected/file"
+                            sandbox="allow-scripts"></iframe>
+                </div>
+            }
+        </section>
+    </div>
+
+    @if (_showSaveDialog)
+    {
+        <div class="modal-backdrop" @onclick="CloseSaveDialog">
+            <div class="modal" @onclick:stopPropagation="true">
+                <h2>Save as sample</h2>
+                <label>
+                    Name
+                    <input @bind="_saveName" maxlength="200" />
+                </label>
+                <label>
+                    Summary
+                    <textarea @bind="_saveSummary" maxlength="1000" rows="2"></textarea>
+                </label>
+                <label>Tags</label>
+                <div class="tag-chips">
+                    @foreach (var tag in _saveTags)
+                    {
+                        <span class="chip">
+                            @tag
+                            <button type="button" class="chip-remove" @onclick="() => _saveTags.Remove(tag)">×</button>
+                        </span>
+                    }
+                </div>
+                <div class="tag-add-row">
+                    <input placeholder="add tag" @bind="_newTag" />
+                    <button type="button" @onclick="AddTag">Add</button>
+                </div>
+                @if (_saveError is not null)
+                {
+                    <p class="form-error" role="alert">@_saveError</p>
+                }
+                <div class="modal-actions">
+                    <button type="button" class="link-button" @onclick="CloseSaveDialog">Cancel</button>
+                    <button type="button" @onclick="SaveAsync" disabled="@_saving">@(_saving ? "Saving…" : "Save")</button>
+                </div>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    public Guid SessionId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "fanout")]
+    public int? Fanout { get; set; }
+
+    private DraftSession? _session;
+    private bool _loaded;
+    private Guid? _selectedId;
+    private bool _generating;
+    private string? _phase;
+    private int _elapsed;
+    private string? _error;
+    private string _refineText = "";
+    private System.Timers.Timer? _elapsedTimer;
+    private CancellationTokenSource? _workCts;
+    private bool _disposed;
+
+    private bool _showSaveDialog;
+    private string _saveName = "";
+    private string _saveSummary = "";
+    private List<string> _saveTags = [];
+    private string _newTag = "";
+    private string? _saveError;
+    private bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+        _loaded = true;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // OnAfterRender only fires in the interactive circuit, so the fan-out kick-off
+        // cannot double-run during prerender.
+        if (firstRender && Fanout is > 0 && _session is { Iterations.Count: 0 } && !_generating)
+        {
+            StartWork(ct => Sessions.GenerateCandidatesAsync(SessionId, Fanout!.Value, MakeProgress(), ct));
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        _session = await Sessions.GetSessionAsync(SessionId);
+        var active = _session?.Iterations.FirstOrDefault(i => i.IsActive) ?? _session?.Iterations.OrderBy(i => i.Index).LastOrDefault();
+        _selectedId = active?.Id;
+    }
+
+    private void StartWork(Func<CancellationToken, Task> work)
+    {
+        _generating = true;
+        _error = null;
+        _elapsed = 0;
+        _workCts?.Dispose();
+        _workCts = new CancellationTokenSource();
+        var ct = _workCts.Token;
+        _elapsedTimer?.Dispose();
+        _elapsedTimer = new System.Timers.Timer(1000);
+        _elapsedTimer.Elapsed += (_, _) =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _elapsed++;
+            _ = InvokeAsync(StateHasChanged);
+        };
+        _elapsedTimer.Start();
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await work(ct);
+                await ReloadAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                // component disposed mid-generation; nothing to surface
+            }
+            catch (Exception ex)
+            {
+                _error = ex.Message;
+            }
+            finally
+            {
+                _generating = false;
+                _phase = null;
+                _elapsedTimer?.Stop();
+                if (!_disposed)
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        });
+    }
+
+    private Progress<GenerationProgress> MakeProgress() => new(p =>
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _phase = p.Phase + (p.OutputTokensSoFar > 0 ? $" (~{p.OutputTokensSoFar} tokens)" : "");
+        _ = InvokeAsync(StateHasChanged);
+    });
+
+    private async Task SelectAsync(Guid iterationId)
+    {
+        _selectedId = iterationId;
+        await Sessions.SetActiveAsync(SessionId, iterationId);
+    }
+
+    private void RefineAsync()
+    {
+        var instruction = _refineText;
+        _refineText = "";
+        StartWork(ct => Sessions.RefineAsync(SessionId, instruction, MakeProgress(), ct));
+    }
+
+    private void OpenSaveDialog()
+    {
+        var iteration = _session?.Iterations.FirstOrDefault(i => i.Id == _selectedId);
+        if (iteration is null)
+        {
+            return;
+        }
+
+        _saveName = iteration.Name ?? "";
+        _saveSummary = iteration.Summary ?? "";
+        _saveTags = ParseTags(iteration.TagsJson);
+        _saveError = null;
+        _showSaveDialog = true;
+    }
+
+    private void CloseSaveDialog() => _showSaveDialog = false;
+
+    private void AddTag()
+    {
+        var normalized = TagNormalizer.Normalize(_newTag);
+        if (normalized.Length > 0 && !_saveTags.Contains(normalized))
+        {
+            _saveTags.Add(normalized);
+        }
+
+        _newTag = "";
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_selectedId is not { } iterationId)
+        {
+            return;
+        }
+
+        _saving = true;
+        _saveError = null;
+        try
+        {
+            var sample = await Sessions.SaveAsSampleAsync(SessionId, iterationId, _saveName, _saveSummary, _saveTags);
+            Navigation.NavigateTo("/");
+        }
+        catch (Exception ex)
+        {
+            _saveError = ex.Message;
+            _saving = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _workCts?.Cancel();
+        _workCts?.Dispose();
+        _elapsedTimer?.Dispose();
+    }
+
+    private static List<string> ParseTags(string? tagsJson)
+    {
+        if (string.IsNullOrWhiteSpace(tagsJson))
+        {
+            return [];
+        }
+
+        try
+        {
+            return (JsonSerializer.Deserialize<List<string>>(tagsJson) ?? [])
+                .Select(TagNormalizer.Normalize)
+                .Where(t => t.Length > 0)
+                .Distinct()
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+}
