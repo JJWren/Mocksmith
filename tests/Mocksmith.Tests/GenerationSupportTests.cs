@@ -102,6 +102,7 @@ public class GenerationSupportTests
     [InlineData(null, true, true, true, "api")]
     [InlineData("claude-code", true, false, false, "claude-code")]
     [InlineData(" API ", false, false, false, "api")]
+    [InlineData("bogus-backend", true, true, true, null)]
     public void Selector_ResolvesBackend(string? mode, bool key, bool oauth, bool cli, string? expected)
     {
         Assert.Equal(expected, GeneratorSelector.Resolve(mode, key, oauth, cli));

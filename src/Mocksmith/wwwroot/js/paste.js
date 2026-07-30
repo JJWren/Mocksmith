@@ -1,16 +1,14 @@
 // Clipboard-paste capture for the generate page: image blobs become base64
-// payloads delivered to Blazor via the registered .NET reference.
+// payloads delivered to Blazor via the registered .NET reference. init/dispose
+// are paired so navigation never accumulates duplicate document-level handlers.
 window.mocksmithPaste = {
-    init(dotNetRef, elementId) {
-        const element = document.getElementById(elementId);
-        if (!element || element.dataset.pasteInit === "true") {
-            return;
-        }
-        element.dataset.pasteInit = "true";
+    _handler: null,
 
-        document.addEventListener("paste", async (event) => {
+    init(dotNetRef, elementId) {
+        this.dispose();
+        const handler = async (event) => {
             if (!document.getElementById(elementId)) {
-                return; // page navigated away
+                return; // page content replaced without dispose (defensive)
             }
             const items = event.clipboardData ? Array.from(event.clipboardData.items) : [];
             for (const item of items) {
@@ -32,6 +30,15 @@ window.mocksmithPaste = {
                 await dotNetRef.invokeMethodAsync(
                     "OnPasteImage", btoa(binary), file.type, file.name || "pasted.png");
             }
-        });
+        };
+        this._handler = handler;
+        document.addEventListener("paste", handler);
+    },
+
+    dispose() {
+        if (this._handler) {
+            document.removeEventListener("paste", this._handler);
+            this._handler = null;
+        }
     },
 };

@@ -55,6 +55,11 @@ public class TokenContractValidatorTests
     [InlineData("""<img src="https://example.com/pic.png">""")]
     [InlineData("""<style>.x{background:url(https://example.com/bg.png)}</style>""")]
     [InlineData("""<style>@import "https://example.com/theme.css";</style>""")]
+    [InlineData("""<script>fetch("https://api.example.com/data").then(r => r.json());</script>""")]
+    [InlineData("""<script>const ws = new WebSocket("wss://example.com/live");</script>""")]
+    [InlineData("""<script>const xhr = new XMLHttpRequest(); xhr.open("GET", "https://example.com/x");</script>""")]
+    [InlineData("""<script>new EventSource("https://example.com/stream");</script>""")]
+    [InlineData("""<script>navigator.sendBeacon("https://example.com/beacon", "x");</script>""")]
     public void ExternalResources_AreViolations(string fragment)
     {
         var html = ValidSample.Replace("<h1>Hi</h1>", fragment);
@@ -66,6 +71,16 @@ public class TokenContractValidatorTests
     public void AnchorLinksAndDataUris_AreNotViolations()
     {
         Assert.DoesNotContain(TokenContractValidator.Validate(ValidSample), v => v.Code == "external-request");
+    }
+
+    [Fact]
+    public void LocalJsInteractions_AreNotViolations()
+    {
+        var html = ValidSample.Replace(
+            "<h1>Hi</h1>",
+            """<script>document.querySelector("nav").addEventListener("click", () => history.pushState({}, "", "#tab"));</script>""");
+
+        Assert.DoesNotContain(TokenContractValidator.Validate(html), v => v.Code == "external-request");
     }
 
     [Fact]

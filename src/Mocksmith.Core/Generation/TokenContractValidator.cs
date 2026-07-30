@@ -20,6 +20,13 @@ public static partial class TokenContractValidator
     [GeneratedRegex("""(?:url\(\s*["']?|@import\s+["']?)(?:https?:)?//""", RegexOptions.IgnoreCase)]
     private static partial Regex ExternalCssRegex();
 
+    // JS-initiated requests matter beyond the app's CSP: exported/handled-off samples
+    // run standalone, where fetch/XHR/WebSocket calls would actually fire.
+    [GeneratedRegex(
+        """(?:fetch\s*\(\s*["'`](?:https?:)?//|new\s+WebSocket\s*\(\s*["'`]wss?://|new\s+EventSource\s*\(\s*["'`](?:https?:)?//|\.open\s*\(\s*["'`][A-Za-z]+["'`]\s*,\s*["'`](?:https?:)?//|sendBeacon\s*\(\s*["'`](?:https?:)?//)""",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex ExternalJsRegex();
+
     public static IReadOnlyList<ContractViolation> Validate(string html)
     {
         var violations = new List<ContractViolation>();
@@ -63,9 +70,9 @@ public static partial class TokenContractValidator
             }
         }
 
-        if (ExternalTagRegex().IsMatch(html) || ExternalCssRegex().IsMatch(html))
+        if (ExternalTagRegex().IsMatch(html) || ExternalCssRegex().IsMatch(html) || ExternalJsRegex().IsMatch(html))
         {
-            violations.Add(new ContractViolation("external-request", "Page references external resources (src/href/url()/@import to a network URL)."));
+            violations.Add(new ContractViolation("external-request", "Page references external resources (tag src/href, CSS url()/@import, or JS fetch/XHR/WebSocket to a network URL)."));
         }
 
         return violations;

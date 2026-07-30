@@ -8,7 +8,7 @@
 @inject IDbContextFactory<MocksmithDbContext> ContextFactory
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
-@implements IDisposable
+@implements IAsyncDisposable
 
 <PageTitle>Generate — Mocksmith</PageTitle>
 
@@ -170,5 +170,19 @@
         }
     }
 
-    public void Dispose() => _selfReference?.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("mocksmithPaste.dispose");
+        }
+        catch (JSDisconnectedException)
+        {
+            // circuit already gone; the browser context (and its listener) is too
+        }
+        finally
+        {
+            _selfReference?.Dispose();
+        }
+    }
 }

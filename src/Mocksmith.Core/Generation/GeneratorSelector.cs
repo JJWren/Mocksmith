@@ -7,14 +7,16 @@ public static class GeneratorSelector
     public const string ClaudeCode = "claude-code";
 
     /// <summary>
-    /// Explicit MOCKSMITH_GENERATOR wins; otherwise an API key selects "api",
-    /// then an OAuth token or an installed CLI selects "claude-code"; null = disabled.
+    /// Explicit MOCKSMITH_GENERATOR wins (unknown values disable generation rather than
+    /// half-configuring it); otherwise an API key selects "api", then an OAuth token or an
+    /// installed CLI selects "claude-code"; null = disabled.
     /// </summary>
     public static string? Resolve(string? explicitMode, bool hasApiKey, bool hasOauthToken, bool cliOnPath)
     {
         if (!string.IsNullOrWhiteSpace(explicitMode))
         {
-            return explicitMode.Trim().ToLowerInvariant();
+            var normalized = explicitMode.Trim().ToLowerInvariant();
+            return normalized is Api or ClaudeCode ? normalized : null;
         }
 
         if (hasApiKey)

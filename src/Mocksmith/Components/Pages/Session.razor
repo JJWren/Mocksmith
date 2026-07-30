@@ -5,6 +5,7 @@
 @using Mocksmith.Core.Services
 @inject DraftSessionService Sessions
 @inject NavigationManager Navigation
+@implements IDisposable
 
 <PageTitle>Draft session — Mocksmith</PageTitle>
 
@@ -141,6 +142,8 @@ else
     private string? _error;
     private string _refineText = "";
     private System.Timers.Timer? _elapsedTimer;
+    private CancellationTokenSource? _workCts;
+    private bool _disposed;
 
     private bool _showSaveDialog;
     private string _saveName = "";
@@ -162,7 +165,7 @@ else
         // cannot double-run during prerender.
         if (firstRender && Fanout is > 0 && _session is { Iterations.Count: 0 } && !_generating)
         {
-            StartWork(() => Sessions.GenerateCandidatesAsync(SessionId, Fanout.Value, MakeProgress()));
+            StartWork(ct => Sessions.GenerateCandidatesAsync(SessionId, Fanout!.Value, MakeProgress(), ct));
         }
     }
 
@@ -173,15 +176,23 @@ else
         _selectedId = active?.Id;
     }
 
-    private void StartWork(Func<Task> work)
+    private void StartWork(Func<CancellationToken, Task> work)
     {
         _generating = true;
         _error = null;
         _elapsed = 0;
+        _workCts?.Dispose();
+        _workCts = new CancellationTokenSource();
+        var ct = _workCts.Token;
         _elapsedTimer?.Dispose();
         _elapsedTimer = new System.Timers.Timer(1000);
         _elapsedTimer.Elapsed += (_, _) =>
         {
+            if (_disposed)
+            {
+                return;
+            }
+
             _elapsed++;
             _ = InvokeAsync(StateHasChanged);
         };
@@ -191,8 +202,12 @@ else
         {
             try
             {
-                await work();
+                await work(ct);
                 await ReloadAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                // component disposed mid-generation; nothing to surface
             }
             catch (Exception ex)
             {
@@ -203,13 +218,21 @@ else
                 _generating = false;
                 _phase = null;
                 _elapsedTimer?.Stop();
-                await InvokeAsync(StateHasChanged);
+                if (!_disposed)
+                {
+                    await InvokeAsync(StateHasChanged);
+                }
             }
         });
     }
 
     private Progress<GenerationProgress> MakeProgress() => new(p =>
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         _phase = p.Phase + (p.OutputTokensSoFar > 0 ? $" (~{p.OutputTokensSoFar} tokens)" : "");
         _ = InvokeAsync(StateHasChanged);
     });
@@ -224,7 +247,7 @@ else
     {
         var instruction = _refineText;
         _refineText = "";
-        StartWork(() => Sessions.RefineAsync(SessionId, instruction, MakeProgress()));
+        StartWork(ct => Sessions.RefineAsync(SessionId, instruction, MakeProgress(), ct));
     }
 
     private void OpenSaveDialog()
@@ -274,6 +297,14 @@ else
             _saveError = ex.Message;
             _saving = false;
         }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _workCts?.Cancel();
+        _workCts?.Dispose();
+        _elapsedTimer?.Dispose();
     }
 
     private static List<string> ParseTags(string? tagsJson)

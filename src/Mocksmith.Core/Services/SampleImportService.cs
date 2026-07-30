@@ -40,7 +40,7 @@ public class SampleImportService(
             Summary = summary.Trim(),
             Description = description?.Trim() ?? "",
             SourceUrl = string.IsNullOrWhiteSpace(sourceUrl) ? null : sourceUrl.Trim(),
-            Model = string.IsNullOrWhiteSpace(model) ? null : model,
+            Model = string.IsNullOrWhiteSpace(model) ? null : model.Trim(),
             TokensJson = tokensJson,
             HtmlFile = "",
             CreatedAt = now,

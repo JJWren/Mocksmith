@@ -33,7 +33,9 @@ public class ClaudeCodeCliGenerator(MocksmithDataOptions dataOptions, string? cl
                 var index = 0;
                 foreach (var shot in request.Screenshots)
                 {
-                    var extension = shot.MediaType.Split('/') is [_, var subtype] ? subtype : "png";
+                    // MediaType is client-supplied — map through an allowlist so it can
+                    // never smuggle path segments into the filename.
+                    var extension = ExtensionFor(shot.MediaType);
                     var path = Path.Combine(workDir, $"screenshot-{index++}.{extension}");
                     await File.WriteAllBytesAsync(path, shot.Data, ct);
                     prompt.AppendLine($"Reference screenshot (read it with the Read tool): {path}");
@@ -189,4 +191,13 @@ public class ClaudeCodeCliGenerator(MocksmithDataOptions dataOptions, string? cl
 
     private static string Truncate(string value, int max)
         => value.Length <= max ? value : value[..max] + "…";
+
+    private static string ExtensionFor(string mediaType) => mediaType.ToLowerInvariant() switch
+    {
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        "image/webp" => "webp",
+        "image/gif" => "gif",
+        _ => "bin",
+    };
 }
