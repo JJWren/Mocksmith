@@ -1,17 +1,135 @@
 @page "/"
+@using Mocksmith.Core.Entities
+@using Mocksmith.Core.Services
+@inject SampleQueryService Queries
+@inject IJSRuntime JS
 
-<PageTitle>Mocksmith</PageTitle>
+<PageTitle>Mocksmith — Dashboard</PageTitle>
 
-<main class="home">
-    <h1>Mocksmith</h1>
-    <p>The forge is lit. The sample dashboard arrives with M2.</p>
-    <AuthorizeView>
-        <Authorized>
-            <p class="home-user">Signed in as <strong>@context.User.Identity?.Name</strong></p>
-            <form method="post" action="/auth/logout">
-                <AntiforgeryToken />
-                <button type="submit" class="link-button">Sign out</button>
-            </form>
-        </Authorized>
-    </AuthorizeView>
-</main>
+<div class="dashboard">
+    <div class="filter-bar">
+        <input class="search-input"
+               type="search"
+               placeholder="Search name or summary…"
+               value="@_searchText"
+               @oninput="OnSearchInputAsync" />
+        @if (_allTags.Count > 0)
+        {
+            <div class="tag-chips" role="group" aria-label="Filter by tag">
+                @foreach (var tag in _allTags)
+                {
+                    var selected = _selectedTags.Contains(tag.Name);
+                    <button type="button"
+                            class="chip @(selected ? "chip-on" : "")"
+                            aria-pressed="@selected"
+                            @onclick="() => ToggleTagAsync(tag.Name)">@tag.Name</button>
+                }
+            </div>
+        }
+    </div>
+
+    @if (_samples.Count == 0)
+    {
+        <div class="empty-state">
+            <h2>No samples @(_filtered ? "match the current filter" : "yet")</h2>
+            <p>@(_filtered ? "Clear the search or tag filters to see the full catalog." : "Import one to light the forge, or wait for generation to arrive with M3.")</p>
+        </div>
+    }
+    else
+    {
+        <div class="tile-grid">
+            @foreach (var sample in _samples)
+            {
+                <article class="tile" @key="sample.Id">
+                    <div class="tile-preview">
+                        <iframe title="Preview of @sample.Name"
+                                data-preview-src="/samples/@sample.Id/file"
+                                sandbox="allow-scripts"
+                                loading="lazy"
+                                tabindex="-1"></iframe>
+                    </div>
+                    <div class="tile-body">
+                        <h2>@sample.Name</h2>
+                        @if (sample.Variants.Count > 0)
+                        {
+                            <span class="variant-badge">@sample.Variants.Count variant@(sample.Variants.Count == 1 ? "" : "s")</span>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(sample.Summary))
+                        {
+                            <p class="tile-summary">@sample.Summary</p>
+                        }
+                        @if (sample.SampleTags.Count > 0)
+                        {
+                            <div class="tile-tags">
+                                @foreach (var sampleTag in sample.SampleTags)
+                                {
+                                    <span class="chip chip-small">@sampleTag.Tag?.Name</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private string _searchText = "";
+    private readonly HashSet<string> _selectedTags = [];
+    private List<Tag> _allTags = [];
+    private List<Sample> _samples = [];
+    private CancellationTokenSource? _debounce;
+
+    private bool _filtered => !string.IsNullOrWhiteSpace(_searchText) || _selectedTags.Count > 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _allTags = await Queries.GetAllTagsAsync();
+        await RefreshAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await JS.InvokeVoidAsync("mocksmithDashboard.observeTiles");
+    }
+
+    private async Task RefreshAsync()
+    {
+        _samples = await Queries.SearchAsync(new SampleFilter(_searchText, [.. _selectedTags]));
+    }
+
+    private async Task OnSearchInputAsync(ChangeEventArgs e)
+    {
+        _searchText = e.Value?.ToString() ?? "";
+        _debounce?.Cancel();
+        var cts = new CancellationTokenSource();
+        _debounce = cts;
+        try
+        {
+            await Task.Delay(250, cts.Token);
+            var results = await Queries.SearchAsync(new SampleFilter(_searchText, [.. _selectedTags]), cts.Token);
+            // Only the latest debounce owner may publish, so a slow older search
+            // can never overwrite results from a newer keystroke.
+            if (ReferenceEquals(_debounce, cts) && !cts.IsCancellationRequested)
+            {
+                _samples = results;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // superseded by newer input
+        }
+    }
+
+    private async Task ToggleTagAsync(string tagName)
+    {
+        _debounce?.Cancel();
+        if (!_selectedTags.Add(tagName))
+        {
+            _selectedTags.Remove(tagName);
+        }
+
+        await RefreshAsync();
+    }
+}

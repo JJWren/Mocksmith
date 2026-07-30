@@ -16,7 +16,7 @@
 Tracked as GitHub issues; sequence respects dependencies (M1 → M2 → M3 → M4 → M5; M6/M7 depend on M2/M4; M8 last).
 
 - [x] M1 — Scaffold (solution, Docker, EF/SQLite, auth, healthcheck) — PR #9
-- [ ] M2 — Catalog core (entities, dashboard, tags, filtering, manual import)
+- [x] M2 — Catalog core (entities, dashboard, tags, filtering, manual import) — PR #11
 - [ ] M3 — Generation (Claude client, request form, draft sessions, refine)
 - [ ] M4 — Edit panel (bridge.js, click-to-select, rule-level patches)
 - [ ] M5 — Variants (fork, name-upsert, grouping)
