@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Mocksmith.Components;
 using Mocksmith.Core.Data;
 using Mocksmith.Core.Security;
+using Mocksmith.Core.Services;
 
 if (args is ["hash-password", var passwordToHash])
 {
@@ -32,6 +33,12 @@ Directory.CreateDirectory(dataDirectory);
 
 builder.Services.AddDbContextFactory<MocksmithDbContext>(options =>
     options.UseSqlite($"Data Source={Path.Combine(dataDirectory, "mocksmith.db")}"));
+
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(new MocksmithDataOptions { RootPath = dataDirectory });
+builder.Services.AddSingleton<SampleFileStore>();
+builder.Services.AddScoped<SampleQueryService>();
+builder.Services.AddScoped<SampleImportService>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -72,6 +79,28 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapHealthChecks("/healthz").AllowAnonymous();
+
+// Sample HTML is served through this authorized endpoint (never as bare static files)
+// and rendered only inside sandboxed iframes. The CSP enforces the single-file contract:
+// no external requests from sample content.
+app.MapGet("/samples/{id:guid}/file", async Task<IResult> (
+    Guid id,
+    HttpContext context,
+    MocksmithDbContext db,
+    SampleFileStore files) =>
+{
+    var sample = await db.Samples.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id);
+    if (sample is null || !files.Exists(sample.HtmlFile))
+    {
+        return Results.NotFound();
+    }
+
+    context.Response.Headers.ContentSecurityPolicy =
+        "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:;";
+    var html = await files.ReadTextAsync(sample.HtmlFile);
+    return Results.Content(html, "text/html");
+}).RequireAuthorization()
+  .WithMetadata(new SkipStatusCodePagesAttribute());
 
 app.MapPost("/auth/login", async Task<IResult> (
     HttpContext context,

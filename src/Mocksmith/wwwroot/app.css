@@ -108,6 +108,257 @@ body {
     text-decoration: underline;
 }
 
+.app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-header {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    padding: 0.75rem 1.5rem;
+    background: var(--ms-surface);
+    border-bottom: 1px solid #2e2e36;
+}
+
+.brand {
+    color: var(--ms-accent);
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+}
+
+.app-nav {
+    display: flex;
+    gap: 1rem;
+}
+
+.app-nav a {
+    color: var(--ms-muted);
+    text-decoration: none;
+    padding: 0.25rem 0;
+    border-bottom: 2px solid transparent;
+}
+
+.app-nav a:hover {
+    color: var(--ms-text);
+}
+
+.app-nav a.active {
+    color: var(--ms-text);
+    border-bottom-color: var(--ms-accent);
+}
+
+.app-header-spacer {
+    flex: 1;
+}
+
+.app-user {
+    color: var(--ms-muted);
+    font-size: 0.9rem;
+}
+
+.app-main {
+    flex: 1;
+    padding: 1.5rem;
+}
+
+.dashboard {
+    max-width: 90rem;
+    margin: 0 auto;
+}
+
+.filter-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.search-input {
+    max-width: 28rem;
+    padding: 0.6rem 0.8rem;
+    border: 1px solid #3a3a42;
+    border-radius: 0.4rem;
+    background: var(--ms-surface);
+    color: var(--ms-text);
+    font-size: 1rem;
+}
+
+.tag-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.chip {
+    padding: 0.25rem 0.7rem;
+    border: 1px solid #3a3a42;
+    border-radius: 999px;
+    background: var(--ms-surface);
+    color: var(--ms-muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+}
+
+.chip:hover {
+    color: var(--ms-text);
+}
+
+.chip-on {
+    background: var(--ms-accent);
+    border-color: var(--ms-accent);
+    color: #1a1208;
+    font-weight: 600;
+}
+
+.chip-small {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.55rem;
+    cursor: default;
+}
+
+.tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.25rem;
+}
+
+.tile {
+    background: var(--ms-surface);
+    border-radius: 0.6rem;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.tile-preview {
+    position: relative;
+    height: 200px;
+    overflow: hidden;
+    background: #101013;
+}
+
+.tile-preview iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1280px;
+    height: 800px;
+    border: 0;
+    transform: scale(0.25);
+    transform-origin: top left;
+    pointer-events: none;
+}
+
+.tile-body {
+    padding: 0.9rem 1rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.tile-body h2 {
+    margin: 0;
+    font-size: 1.05rem;
+}
+
+.tile-summary {
+    margin: 0;
+    color: var(--ms-muted);
+    font-size: 0.9rem;
+}
+
+.tile-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.2rem;
+}
+
+.variant-badge {
+    align-self: flex-start;
+    padding: 0.1rem 0.55rem;
+    border-radius: 999px;
+    background: #33333c;
+    color: var(--ms-muted);
+    font-size: 0.75rem;
+}
+
+.empty-state {
+    padding: 4rem 1rem;
+    text-align: center;
+    color: var(--ms-muted);
+}
+
+.empty-state h2 {
+    color: var(--ms-text);
+}
+
+.import-page {
+    max-width: 44rem;
+    margin: 0 auto;
+}
+
+.muted {
+    color: var(--ms-muted);
+}
+
+.import-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.import-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.9rem;
+    color: var(--ms-muted);
+}
+
+.import-form input,
+.import-form textarea {
+    padding: 0.55rem 0.7rem;
+    border: 1px solid #3a3a42;
+    border-radius: 0.4rem;
+    background: var(--ms-surface);
+    color: var(--ms-text);
+    font-size: 1rem;
+    font-family: inherit;
+}
+
+.html-input {
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 0.85rem;
+}
+
+.form-error {
+    margin: 0;
+    color: var(--ms-error);
+}
+
+.import-form button {
+    align-self: flex-start;
+    padding: 0.6rem 1.4rem;
+    border: none;
+    border-radius: 0.4rem;
+    background: var(--ms-accent);
+    color: #1a1208;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.import-form button:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
 .valid.modified:not([type=checkbox]) {
     outline: 1px solid #26b050;
 }

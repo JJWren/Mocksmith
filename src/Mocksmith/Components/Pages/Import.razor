@@ -1,0 +1,97 @@
+@page "/import"
+@using Mocksmith.Core.Services
+@inject SampleImportService Importer
+@inject NavigationManager Navigation
+
+<PageTitle>Import sample — Mocksmith</PageTitle>
+
+<div class="import-page">
+    <h1>Import a sample</h1>
+    <p class="muted">Bring an externally produced single-file HTML sample into the catalog.</p>
+
+    <div class="import-form">
+        <label>
+            Name
+            <input @bind="_name" maxlength="200" required />
+        </label>
+        <label>
+            Summary
+            <textarea @bind="_summary" maxlength="1000" rows="2"></textarea>
+        </label>
+        <label>
+            Tags <span class="muted">(comma separated)</span>
+            <input @bind="_tags" placeholder="dark, dashboard, brutalist" />
+        </label>
+        <label>
+            Source URL <span class="muted">(optional provenance)</span>
+            <input @bind="_sourceUrl" type="url" />
+        </label>
+        <label>
+            HTML file
+            <InputFile OnChange="OnFileSelectedAsync" accept=".html,.htm" />
+        </label>
+        <label>
+            …or paste HTML
+            <textarea @bind="_html" rows="12" spellcheck="false" class="html-input"></textarea>
+        </label>
+
+        @if (_error is not null)
+        {
+            <p class="form-error" role="alert">@_error</p>
+        }
+
+        <button type="button" @onclick="SubmitAsync" disabled="@_busy">
+            @(_busy ? "Importing…" : "Import")
+        </button>
+    </div>
+</div>
+
+@code {
+    private const long MaxHtmlBytes = 5 * 1024 * 1024;
+
+    private string _name = "";
+    private string _summary = "";
+    private string _tags = "";
+    private string _sourceUrl = "";
+    private string _html = "";
+    private string? _error;
+    private bool _busy;
+
+    private async Task OnFileSelectedAsync(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        try
+        {
+            using var reader = new StreamReader(e.File.OpenReadStream(MaxHtmlBytes));
+            _html = await reader.ReadToEndAsync();
+        }
+        catch (IOException)
+        {
+            _error = "That file is larger than 5 MB — samples are single self-contained pages.";
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        _error = null;
+        _busy = true;
+        try
+        {
+            await Importer.ImportAsync(
+                _name,
+                _summary,
+                _tags.Split(',', StringSplitOptions.RemoveEmptyEntries),
+                _html,
+                _sourceUrl);
+            Navigation.NavigateTo("/");
+        }
+        catch (ArgumentException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}
