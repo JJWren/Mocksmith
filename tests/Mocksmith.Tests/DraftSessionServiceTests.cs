@@ -119,6 +119,94 @@ public class DraftSessionServiceTests : IDisposable
         Assert.Equal(DraftSessionStatus.Saved, closedSession.Status);
     }
 
+    [Fact]
+    public async Task SaveAsVariant_SameNameTwice_UpsertsSingleVariantWithLatestContent()
+    {
+        var sample = await _importService.ImportAsync(
+            "Base", "", [],
+            "<!doctype html><html><head></head><body>v0</body></html>");
+        var session = await _service.StartSessionFromSampleAsync(sample.Id);
+        var first = (await _service.GetSessionAsync(session.Id))!.Iterations.Single();
+
+        await _service.SaveAsVariantAsync(session.Id, first.Id, "Dark");
+
+        // Second session, same variant name — must overwrite, not duplicate.
+        var session2 = await _service.StartSessionFromSampleAsync(sample.Id);
+        var iteration2 = (await _service.GetSessionAsync(session2.Id))!.Iterations.Single();
+        await _service.ApplyManualPatchAsync(session2.Id, "h1 { color: red; }");
+        var patched = (await _service.GetSessionAsync(session2.Id))!.Iterations.Single(i => i.IsActive);
+        await _service.SaveAsVariantAsync(session2.Id, patched.Id, "  Dark  ");
+
+        await using var db = _factory.CreateDbContext();
+        var variant = Assert.Single(db.Variants.Where(v => v.SampleId == sample.Id));
+        Assert.Equal("Dark", variant.Name);
+        var html = await _fileStore.ReadTextAsync(variant.HtmlFile);
+        Assert.Contains("color: red", html);
+        Assert.Equal("h1 { color: red; }", variant.PatchJson);
+    }
+
+    [Fact]
+    public async Task SaveAsVariant_DifferentNames_CreateSiblings()
+    {
+        var sample = await _importService.ImportAsync(
+            "Base", "", [],
+            "<!doctype html><html><head></head><body>v0</body></html>");
+        var session = await _service.StartSessionFromSampleAsync(sample.Id);
+        var iteration = (await _service.GetSessionAsync(session.Id))!.Iterations.Single();
+
+        await _service.SaveAsVariantAsync(session.Id, iteration.Id, "Dark");
+        await _service.SaveAsVariantAsync(session.Id, iteration.Id, "Compact");
+
+        await using var db = _factory.CreateDbContext();
+        Assert.Equal(2, db.Variants.Count(v => v.SampleId == sample.Id));
+    }
+
+    [Fact]
+    public async Task OverwriteOrigin_UpdatesSampleInPlace()
+    {
+        var sample = await _importService.ImportAsync(
+            "Original", "old summary", ["alpha"],
+            "<!doctype html><html><head></head><body>OLD</body></html>");
+        var session = await _service.StartSessionFromSampleAsync(sample.Id);
+        var iteration = (await _service.GetSessionAsync(session.Id))!.Iterations.Single();
+        await _service.ApplyManualPatchAsync(session.Id, "body { color: red; }");
+        var patched = (await _service.GetSessionAsync(session.Id))!.Iterations.Single(i => i.IsActive);
+
+        await _service.OverwriteOriginAsync(session.Id, patched.Id, "Renamed", "new summary", ["beta"]);
+
+        await using var db = _factory.CreateDbContext();
+        var persisted = await db.Samples
+            .Include(s => s.SampleTags).ThenInclude(st => st.Tag)
+            .SingleAsync(s => s.Id == sample.Id);
+        Assert.Equal("Renamed", persisted.Name);
+        Assert.Equal("new summary", persisted.Summary);
+        Assert.Equal("beta", Assert.Single(persisted.SampleTags).Tag!.Name);
+        Assert.Equal(1, await db.Samples.CountAsync());
+        var html = await _fileStore.ReadTextAsync(persisted.HtmlFile);
+        Assert.Contains("color: red", html);
+    }
+
+    [Fact]
+    public async Task StartSessionFromVariant_SeedsVariantContentAndName()
+    {
+        var sample = await _importService.ImportAsync(
+            "Base", "", [],
+            "<!doctype html><html><head></head><body>base</body></html>");
+        var session = await _service.StartSessionFromSampleAsync(sample.Id);
+        var iteration = (await _service.GetSessionAsync(session.Id))!.Iterations.Single();
+        await _service.ApplyManualPatchAsync(session.Id, "h1 { color: teal; }");
+        var patched = (await _service.GetSessionAsync(session.Id))!.Iterations.Single(i => i.IsActive);
+        var variant = await _service.SaveAsVariantAsync(session.Id, patched.Id, "Teal");
+
+        var variantSession = await _service.StartSessionFromVariantAsync(variant.Id);
+        var loaded = await _service.GetSessionAsync(variantSession.Id);
+
+        Assert.Equal(sample.Id, loaded!.SourceSampleId);
+        var seeded = Assert.Single(loaded.Iterations);
+        Assert.Equal("Teal", seeded.Name);
+        Assert.Contains("color: teal", await _fileStore.ReadTextAsync(seeded.HtmlFile));
+    }
+
     public void Dispose()
     {
         _factory.Dispose();

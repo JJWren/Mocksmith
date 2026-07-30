@@ -19,7 +19,7 @@ Tracked as GitHub issues; sequence respects dependencies (M1 → M2 → M3 → M
 - [x] M2 — Catalog core (entities, dashboard, tags, filtering, manual import) — PR #11
 - [x] M3 — Generation (dual backends per #13: API + Claude Code CLI; request form, draft sessions, fan-out, refine) — PR #15
 - [x] M4 — Edit panel (bridge injection, click-to-select, rule-level patches, bake-on-save, saved-sample workspace entry) — PR #17
-- [ ] M5 — Variants (fork, name-upsert, grouping)
+- [x] M5 — Variants (fork, save modes with name-upsert, dashboard grouping, variant workspace) — PR #19
 - [ ] M6 — Collections (smart queries + pins)
 - [ ] M7 — Handoff (zip bundle, design brief, agent prompt)
 - [ ] M8 — Polish (cost view, docs, release hygiene)

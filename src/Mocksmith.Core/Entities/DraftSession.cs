@@ -23,6 +23,12 @@ public class DraftSession
     /// <summary>Claude model used for generation and refine turns in this session.</summary>
     public string Model { get; set; } = "";
 
+    /// <summary>
+    /// When the workspace was opened from a saved sample (or one of its variants),
+    /// the origin sample — enables the overwrite / save-as-variant flows.
+    /// </summary>
+    public Guid? SourceSampleId { get; set; }
+
     public List<DraftIteration> Iterations { get; set; } = [];
     public List<InputAsset> Assets { get; set; } = [];
 }

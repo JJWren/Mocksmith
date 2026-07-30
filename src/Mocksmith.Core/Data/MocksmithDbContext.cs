@@ -121,6 +121,10 @@ public class MocksmithDbContext(DbContextOptions<MocksmithDbContext> options) : 
         {
             entity.Property(s => s.SourceUrl).HasMaxLength(2000);
             entity.Property(s => s.Model).HasMaxLength(100);
+            entity.HasOne<Sample>()
+                .WithMany()
+                .HasForeignKey(s => s.SourceSampleId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

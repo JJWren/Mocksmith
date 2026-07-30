@@ -1,9 +1,12 @@
 @page "/sessions/{SessionId:guid}"
 @using System.Text.Json
+@using Microsoft.EntityFrameworkCore
+@using Mocksmith.Core.Data
 @using Mocksmith.Core.Entities
 @using Mocksmith.Core.Generation
 @using Mocksmith.Core.Services
 @inject DraftSessionService Sessions
+@inject IDbContextFactory<MocksmithDbContext> ContextFactory
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @implements IAsyncDisposable
@@ -163,16 +166,55 @@ else
     {
         <div class="modal-backdrop" @onclick="CloseSaveDialog">
             <div class="modal" @onclick:stopPropagation="true">
-                <h2>Save as sample</h2>
-                <label>
-                    Name
-                    <input @bind="_saveName" maxlength="200" />
-                </label>
+                <h2>Save</h2>
+                @if (_originSampleName is not null)
+                {
+                    <div class="save-mode-group" role="radiogroup" aria-label="Save mode">
+                        <label class="save-mode">
+                            <input type="radio" name="save-mode" value="variant"
+                                   checked="@(_saveMode == "variant")"
+                                   @onchange='() => _saveMode = "variant"' />
+                            Save as variant of <strong>@_originSampleName</strong>
+                        </label>
+                        <label class="save-mode">
+                            <input type="radio" name="save-mode" value="overwrite"
+                                   checked="@(_saveMode == "overwrite")"
+                                   @onchange='() => _saveMode = "overwrite"' />
+                            Overwrite <strong>@_originSampleName</strong>
+                        </label>
+                        <label class="save-mode">
+                            <input type="radio" name="save-mode" value="new"
+                                   checked="@(_saveMode == "new")"
+                                   @onchange='() => _saveMode = "new"' />
+                            New sample
+                        </label>
+                    </div>
+                }
+
+                @if (_saveMode == "variant" && _originSampleName is not null)
+                {
+                    <label>
+                        Variant name <span class="muted">(an existing name is overwritten)</span>
+                        <input @bind="_variantName" maxlength="100" placeholder="Dark, Compact, Serif…" />
+                    </label>
+                }
+                else
+                {
+                    <label>
+                        Name
+                        <input @bind="_saveName" maxlength="200" />
+                    </label>
+                }
+                @if (_saveMode != "variant" || _originSampleName is null)
+                {
                 <label>
                     Summary
                     <textarea @bind="_saveSummary" maxlength="1000" rows="2"></textarea>
                 </label>
                 <label>Tags</label>
+                }
+                @if (_saveMode != "variant" || _originSampleName is null)
+                {
                 <div class="tag-chips">
                     @foreach (var tag in _saveTags)
                     {
@@ -186,6 +228,7 @@ else
                     <input placeholder="add tag" @bind="_newTag" />
                     <button type="button" @onclick="AddTag">Add</button>
                 </div>
+                }
                 @if (_saveError is not null)
                 {
                     <p class="form-error" role="alert">@_saveError</p>
@@ -233,6 +276,9 @@ else
     private string _newTag = "";
     private string? _saveError;
     private bool _saving;
+    private string _saveMode = "new";
+    private string _variantName = "";
+    private string? _originSampleName;
 
     private sealed record BridgeSelection(string Selector, string Tag, Dictionary<string, string> Computed);
 
@@ -416,6 +462,19 @@ else
         _session = await Sessions.GetSessionAsync(SessionId);
         var active = _session?.Iterations.FirstOrDefault(i => i.IsActive) ?? _session?.Iterations.OrderBy(i => i.Index).LastOrDefault();
         _selectedId = active?.Id;
+
+        if (_session?.SourceSampleId is { } originId)
+        {
+            await using var db = await ContextFactory.CreateDbContextAsync();
+            _originSampleName = await db.Samples.AsNoTracking()
+                .Where(s => s.Id == originId)
+                .Select(s => s.Name)
+                .FirstOrDefaultAsync();
+        }
+        else
+        {
+            _originSampleName = null;
+        }
     }
 
     private void StartWork(Func<CancellationToken, Task> work)
@@ -505,6 +564,10 @@ else
         _saveSummary = iteration.Summary ?? "";
         _saveTags = ParseTags(iteration.TagsJson);
         _saveError = null;
+        _saveMode = _originSampleName is null ? "new" : "variant";
+        _variantName = _originSampleName is not null && iteration.Name != _originSampleName
+            ? iteration.Name ?? ""
+            : "";
         _showSaveDialog = true;
     }
 
@@ -532,7 +595,19 @@ else
         _saveError = null;
         try
         {
-            await Sessions.SaveAsSampleAsync(SessionId, iterationId, _saveName, _saveSummary, _saveTags);
+            switch (_saveMode)
+            {
+                case "overwrite" when _originSampleName is not null:
+                    await Sessions.OverwriteOriginAsync(SessionId, iterationId, _saveName, _saveSummary, _saveTags);
+                    break;
+                case "variant" when _originSampleName is not null:
+                    await Sessions.SaveAsVariantAsync(SessionId, iterationId, _variantName);
+                    break;
+                default:
+                    await Sessions.SaveAsSampleAsync(SessionId, iterationId, _saveName, _saveSummary, _saveTags);
+                    break;
+            }
+
             Navigation.NavigateTo("/");
         }
         catch (Exception ex)
