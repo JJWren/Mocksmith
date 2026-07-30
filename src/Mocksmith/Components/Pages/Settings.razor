@@ -1,0 +1,60 @@
+@page "/settings"
+@using Microsoft.EntityFrameworkCore
+@using Mocksmith.Core.Data
+@using Mocksmith.Core.Generation
+@using Mocksmith.Core.Services
+@inject IDbContextFactory<MocksmithDbContext> ContextFactory
+@inject GenerationOptions Generation
+
+<PageTitle>Settings — Mocksmith</PageTitle>
+
+<div class="settings-page">
+    <h1>Settings</h1>
+
+    <div class="import-form">
+        <label>
+            Default generation model <span class="muted">(prefills the Generate form)</span>
+            <select @bind="_defaultModel">
+                @foreach (var model in ModelPricing.SupportedModels)
+                {
+                    <option value="@model">@model</option>
+                }
+            </select>
+        </label>
+        @if (_saved)
+        {
+            <p class="muted">Saved.</p>
+        }
+        <button type="button" @onclick="SaveAsync">Save</button>
+    </div>
+
+    <div class="settings-info muted">
+        <h2>Runtime</h2>
+        <p>Generation backend: <strong>@(Generation.Backend ?? "not configured")</strong> (set via <code>MOCKSMITH_GENERATOR</code> / credentials — see README).</p>
+        <p>Backup: everything lives in the bind-mounted <code>/data</code> folder — stop the container, copy the folder, start again.</p>
+    </div>
+</div>
+
+@code {
+    private string _defaultModel = "claude-sonnet-5";
+    private bool _saved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await ContextFactory.CreateDbContextAsync();
+        var settings = await db.Settings.AsNoTracking().FirstOrDefaultAsync();
+        if (settings is not null && ModelPricing.SupportedModels.Contains(settings.DefaultModel))
+        {
+            _defaultModel = settings.DefaultModel;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        await using var db = await ContextFactory.CreateDbContextAsync();
+        var settings = await db.Settings.FirstAsync();
+        settings.DefaultModel = _defaultModel;
+        await db.SaveChangesAsync();
+        _saved = true;
+    }
+}

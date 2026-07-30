@@ -1,0 +1,95 @@
+@page "/usage"
+@using Mocksmith.Core.Entities
+@using Mocksmith.Core.Services
+@inject UsageService UsageStats
+
+<PageTitle>Usage — Mocksmith</PageTitle>
+
+<div class="usage-page">
+    <h1>Generation usage</h1>
+
+    @if (_totals is { } totals)
+    {
+        <div class="usage-cards">
+            <div class="usage-card">
+                <span class="usage-value">@totals.Calls</span>
+                <span class="muted">calls total</span>
+            </div>
+            <div class="usage-card">
+                <span class="usage-value">@((totals.InputTokens + totals.OutputTokens).ToString("N0"))</span>
+                <span class="muted">tokens total</span>
+            </div>
+            <div class="usage-card">
+                <span class="usage-value">$@totals.ApiCostUsd.ToString("0.00##")</span>
+                <span class="muted">API cost total</span>
+            </div>
+            <div class="usage-card">
+                <span class="usage-value">$@totals.MonthApiCostUsd.ToString("0.00##")</span>
+                <span class="muted">API cost this month (@totals.MonthCalls calls)</span>
+            </div>
+        </div>
+
+        @if (_byModel.Count > 0)
+        {
+            <h2>By model</h2>
+            <table class="usage-table">
+                <thead>
+                    <tr><th>Model</th><th>Backend</th><th>Calls</th><th>Tokens in</th><th>Tokens out</th><th>API cost</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _byModel)
+                    {
+                        <tr>
+                            <td>@row.Model</td>
+                            <td>@row.Backend</td>
+                            <td>@row.Calls</td>
+                            <td>@row.InputTokens.ToString("N0")</td>
+                            <td>@row.OutputTokens.ToString("N0")</td>
+                            <td>@(row.Backend == "claude-code" ? "subscription" : $"${row.ApiCostUsd:0.00##}")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <h2>Recent calls</h2>
+        @if (_recent.Count == 0)
+        {
+            <div class="empty-state"><h2>No generation calls yet</h2></div>
+        }
+        else
+        {
+            <table class="usage-table">
+                <thead>
+                    <tr><th>When (UTC)</th><th>Model</th><th>Backend</th><th>In</th><th>Out</th><th>Cost</th><th>Duration</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in _recent)
+                    {
+                        <tr>
+                            <td>@log.CreatedAt.ToString("MMM d HH:mm")</td>
+                            <td>@log.Model</td>
+                            <td>@log.Backend</td>
+                            <td>@log.InputTokens.ToString("N0")</td>
+                            <td>@log.OutputTokens.ToString("N0")</td>
+                            <td>@(log.EstimatedCostUsd is { } cost ? $"${cost:0.00##}" : "subscription")</td>
+                            <td>@((log.DurationMs / 1000.0).ToString("0.0"))s</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    }
+</div>
+
+@code {
+    private UsageTotals? _totals;
+    private List<ModelUsage> _byModel = [];
+    private List<GenerationLog> _recent = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        (_totals, _byModel) = await UsageStats.GetSummaryAsync();
+        _recent = await UsageStats.GetRecentAsync();
+    }
+}
