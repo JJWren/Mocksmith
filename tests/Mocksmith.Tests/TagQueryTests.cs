@@ -51,8 +51,16 @@ public class TagQueryTests
         Assert.True(Eval("Dark_Mode and DASHBOARD", "dark-mode", "dashboard"));
     }
 
+    [Fact]
+    public void WhitespaceVariants_TokenizeCorrectly()
+    {
+        Assert.True(Eval("dark\tAND\n dashboard", "dark", "dashboard"));
+    }
+
     [Theory]
+    [InlineData(null)]
     [InlineData("")]
+    [InlineData("   ")]
     [InlineData("AND dark")]
     [InlineData("dark AND")]
     [InlineData("dark OR OR light")]

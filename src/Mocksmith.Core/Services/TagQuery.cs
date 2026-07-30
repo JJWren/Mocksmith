@@ -33,13 +33,14 @@ public sealed class TagQuery
     private TagQuery(Node root) => _root = root;
 
     /// <summary>Parses a query, throwing <see cref="FormatException"/> with a readable message on invalid syntax.</summary>
-    public static TagQuery Parse(string query)
+    public static TagQuery Parse(string? query)
     {
-        var tokens = Tokenize(query);
-        if (tokens.Count == 0)
+        if (string.IsNullOrWhiteSpace(query))
         {
             throw new FormatException("The query is empty.");
         }
+
+        var tokens = Tokenize(query);
 
         var position = 0;
         var root = ParseOr(tokens, ref position);
@@ -51,7 +52,7 @@ public sealed class TagQuery
         return new TagQuery(root);
     }
 
-    public static bool TryParse(string query, out string? error)
+    public static bool TryParse(string? query, out string? error)
     {
         try
         {
@@ -75,14 +76,10 @@ public sealed class TagQuery
 
     private static List<string> Tokenize(string query)
     {
-        var tokens = new List<string>();
-        foreach (var raw in query.Replace("(", " ( ").Replace(")", " ) ")
-                     .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            tokens.Add(raw);
-        }
-
-        return tokens;
+        // Split on any whitespace (tabs/newlines arrive via copy-paste), not just spaces.
+        return query.Replace("(", " ( ").Replace(")", " ) ")
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
     }
 
     private static Node ParseOr(List<string> tokens, ref int position)

@@ -1,7 +1,7 @@
 @page "/collections"
 @using Mocksmith.Core.Entities
 @using Mocksmith.Core.Services
-@inject CollectionService Collections
+@inject CollectionService CollectionsService
 @inject NavigationManager Navigation
 
 <PageTitle>Collections — Mocksmith</PageTitle>
@@ -80,14 +80,14 @@
 
     protected override async Task OnInitializedAsync() => await RefreshAsync();
 
-    private async Task RefreshAsync() => _collections = await Collections.GetAllWithCountsAsync();
+    private async Task RefreshAsync() => _collections = await CollectionsService.GetAllWithCountsAsync();
 
     private async Task CreateAsync()
     {
         _createError = null;
         try
         {
-            var collection = await Collections.CreateAsync(_newName, _newQuery);
+            var collection = await CollectionsService.CreateAsync(_newName, _newQuery);
             Navigation.NavigateTo($"/collections/{collection.Id}");
         }
         catch (Exception ex) when (ex is ArgumentException or FormatException)
@@ -109,7 +109,7 @@
         _editError = null;
         try
         {
-            await Collections.UpdateAsync(collectionId, _editName, _editQuery);
+            await CollectionsService.UpdateAsync(collectionId, _editName, _editQuery);
             _editingId = null;
             await RefreshAsync();
         }
@@ -121,7 +121,7 @@
 
     private async Task DeleteAsync(int collectionId)
     {
-        await Collections.DeleteAsync(collectionId);
+        await CollectionsService.DeleteAsync(collectionId);
         await RefreshAsync();
     }
 }

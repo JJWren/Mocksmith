@@ -114,15 +114,15 @@ else
     private Collection? _collection;
     private bool _loaded;
     private List<Sample> _members = [];
-    private List<Sample> _excludedSamples = [];
+    private HashSet<Guid> _memberIds = [];
+    private List<SampleNameEntry> _excludedSamples = [];
+    private List<SampleNameEntry> _nameIndex = [];
     private string _includeSearch = "";
 
-    private IEnumerable<Sample> _includeCandidates => _allSamples
-        .Where(s => _members.All(m => m.Id != s.Id))
+    private IEnumerable<SampleNameEntry> _includeCandidates => _nameIndex
+        .Where(s => !_memberIds.Contains(s.Id))
         .Where(s => s.Name.Contains(_includeSearch, StringComparison.OrdinalIgnoreCase))
         .Take(8);
-
-    private List<Sample> _allSamples = [];
 
     protected override async Task OnInitializedAsync()
     {
@@ -144,9 +144,11 @@ else
         }
 
         _members = await Collections.GetMembersAsync(CollectionId);
-        _allSamples = await Queries.SearchAsync(new SampleFilter());
+        _memberIds = _members.Select(m => m.Id).ToHashSet();
+        // Pickers and pin rows only need id/name — never the full tag/variant graphs.
+        _nameIndex = await Queries.GetNameIndexAsync();
         var excludedIds = _collection.Pins.Where(p => p.Mode == PinMode.Exclude).Select(p => p.SampleId).ToHashSet();
-        _excludedSamples = _allSamples.Where(s => excludedIds.Contains(s.Id)).ToList();
+        _excludedSamples = _nameIndex.Where(s => excludedIds.Contains(s.Id)).ToList();
     }
 
     private PinMode? PinFor(Guid sampleId)
