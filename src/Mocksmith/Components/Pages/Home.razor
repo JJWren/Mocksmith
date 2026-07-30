@@ -103,13 +103,20 @@
     {
         _searchText = e.Value?.ToString() ?? "";
         _debounce?.Cancel();
-        _debounce = new CancellationTokenSource();
+        var cts = new CancellationTokenSource();
+        _debounce = cts;
         try
         {
-            await Task.Delay(250, _debounce.Token);
-            await RefreshAsync();
+            await Task.Delay(250, cts.Token);
+            var results = await Queries.SearchAsync(new SampleFilter(_searchText, [.. _selectedTags]), cts.Token);
+            // Only the latest debounce owner may publish, so a slow older search
+            // can never overwrite results from a newer keystroke.
+            if (ReferenceEquals(_debounce, cts) && !cts.IsCancellationRequested)
+            {
+                _samples = results;
+            }
         }
-        catch (TaskCanceledException)
+        catch (OperationCanceledException)
         {
             // superseded by newer input
         }
@@ -117,6 +124,7 @@
 
     private async Task ToggleTagAsync(string tagName)
     {
+        _debounce?.Cancel();
         if (!_selectedTags.Add(tagName))
         {
             _selectedTags.Remove(tagName);

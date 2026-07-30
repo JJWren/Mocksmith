@@ -52,7 +52,17 @@ public class SampleImportService(
         }
 
         db.Samples.Add(sample);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch
+        {
+            // Compensate the file write above so a failed save leaves no orphan on disk.
+            fileStore.TryDelete(sample.HtmlFile);
+            throw;
+        }
+
         return sample;
     }
 }
