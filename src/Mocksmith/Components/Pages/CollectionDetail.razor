@@ -1,0 +1,162 @@
+@page "/collections/{CollectionId:int}"
+@using Mocksmith.Core.Entities
+@using Mocksmith.Core.Services
+@inject CollectionService Collections
+@inject SampleQueryService Queries
+@inject IJSRuntime JS
+
+<PageTitle>@(_collection?.Name ?? "Collection") — Mocksmith</PageTitle>
+
+@if (_collection is null)
+{
+    <p class="muted">@(_loaded ? "Collection not found." : "Loading…")</p>
+}
+else
+{
+    <div class="dashboard">
+        <div class="collection-header">
+            <h1>@_collection.Name</h1>
+            <code>@_collection.TagQuery</code>
+            <a class="muted" href="/collections">all collections</a>
+        </div>
+
+        @if (_members.Count == 0)
+        {
+            <div class="empty-state"><h2>No members match this collection</h2></div>
+        }
+        else
+        {
+            <div class="tile-grid">
+                @foreach (var sample in _members)
+                {
+                    var pin = PinFor(sample.Id);
+                    <article class="tile" @key="sample.Id">
+                        <div class="tile-preview">
+                            <iframe title="Preview of @sample.Name"
+                                    data-preview-src="/samples/@sample.Id/file"
+                                    sandbox="allow-scripts"
+                                    loading="lazy"
+                                    tabindex="-1"></iframe>
+                        </div>
+                        <div class="tile-body">
+                            <div class="tile-title-row">
+                                <h2>@sample.Name</h2>
+                                @if (pin == PinMode.Include)
+                                {
+                                    <button type="button" class="tile-edit" title="Remove the include pin"
+                                            @onclick="() => SetPinAsync(sample.Id, null)">Unpin</button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="tile-edit" title="Exclude from this collection"
+                                            @onclick="() => SetPinAsync(sample.Id, PinMode.Exclude)">Exclude</button>
+                                }
+                            </div>
+                            @if (pin == PinMode.Include)
+                            {
+                                <span class="variant-badge">pinned in</span>
+                            }
+                            @if (sample.SampleTags.Count > 0)
+                            {
+                                <div class="tile-tags">
+                                    @foreach (var sampleTag in sample.SampleTags)
+                                    {
+                                        <span class="chip chip-small">@sampleTag.Tag?.Name</span>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+
+        <div class="pin-manager">
+            <h2>Pins</h2>
+            @if (_excludedSamples.Count > 0)
+            {
+                <h3 class="muted">Excluded</h3>
+                <ul class="pin-list">
+                    @foreach (var sample in _excludedSamples)
+                    {
+                        <li>
+                            @sample.Name
+                            <button type="button" class="tile-edit" @onclick="() => SetPinAsync(sample.Id, null)">Remove exclude</button>
+                        </li>
+                    }
+                </ul>
+            }
+
+            <h3 class="muted">Include a sample the query misses</h3>
+            <div class="tag-add-row">
+                <input placeholder="search samples by name…" @bind="_includeSearch" @bind:event="oninput" />
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_includeSearch))
+            {
+                <ul class="pin-list">
+                    @foreach (var candidate in _includeCandidates)
+                    {
+                        <li>
+                            @candidate.Name
+                            <button type="button" class="tile-edit" @onclick="() => SetPinAsync(candidate.Id, PinMode.Include)">Include</button>
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int CollectionId { get; set; }
+
+    private Collection? _collection;
+    private bool _loaded;
+    private List<Sample> _members = [];
+    private HashSet<Guid> _memberIds = [];
+    private List<SampleNameEntry> _excludedSamples = [];
+    private List<SampleNameEntry> _nameIndex = [];
+    private string _includeSearch = "";
+
+    private IEnumerable<SampleNameEntry> _includeCandidates => _nameIndex
+        .Where(s => !_memberIds.Contains(s.Id))
+        .Where(s => s.Name.Contains(_includeSearch, StringComparison.OrdinalIgnoreCase))
+        .Take(8);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _loaded = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await JS.InvokeVoidAsync("mocksmithDashboard.observeTiles");
+    }
+
+    private async Task RefreshAsync()
+    {
+        _collection = await Collections.GetAsync(CollectionId);
+        if (_collection is null)
+        {
+            return;
+        }
+
+        _members = await Collections.GetMembersAsync(CollectionId);
+        _memberIds = _members.Select(m => m.Id).ToHashSet();
+        // Pickers and pin rows only need id/name — never the full tag/variant graphs.
+        _nameIndex = await Queries.GetNameIndexAsync();
+        var excludedIds = _collection.Pins.Where(p => p.Mode == PinMode.Exclude).Select(p => p.SampleId).ToHashSet();
+        _excludedSamples = _nameIndex.Where(s => excludedIds.Contains(s.Id)).ToList();
+    }
+
+    private PinMode? PinFor(Guid sampleId)
+        => _collection?.Pins.FirstOrDefault(p => p.SampleId == sampleId)?.Mode;
+
+    private async Task SetPinAsync(Guid sampleId, PinMode? mode)
+    {
+        await Collections.SetPinAsync(CollectionId, sampleId, mode);
+        await RefreshAsync();
+    }
+}

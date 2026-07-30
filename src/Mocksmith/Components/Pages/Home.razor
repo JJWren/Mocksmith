@@ -3,12 +3,27 @@
 @using Mocksmith.Core.Services
 @inject SampleQueryService Queries
 @inject DraftSessionService Sessions
+@inject CollectionService Collections
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
 <PageTitle>Mocksmith — Dashboard</PageTitle>
 
 <div class="dashboard">
+    @if (_collections.Count > 0)
+    {
+        <div class="collection-strip">
+            @foreach (var entry in _collections)
+            {
+                <a class="collection-card" href="/collections/@entry.Collection.Id">
+                    <strong>@entry.Collection.Name</strong>
+                    <span class="muted">@entry.MemberCount</span>
+                </a>
+            }
+            <a class="collection-card collection-card-new" href="/collections">+ collection</a>
+        </div>
+    }
+
     <div class="filter-bar">
         <input class="search-input"
                type="search"
@@ -117,9 +132,12 @@
 
     private bool _filtered => !string.IsNullOrWhiteSpace(_searchText) || _selectedTags.Count > 0;
 
+    private List<CollectionWithCount> _collections = [];
+
     protected override async Task OnInitializedAsync()
     {
         _allTags = await Queries.GetAllTagsAsync();
+        _collections = await Collections.GetAllWithCountsAsync();
         await RefreshAsync();
     }
 

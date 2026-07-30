@@ -63,6 +63,7 @@ builder.Services.AddSingleton<IDesignGenerator>(services => generationBackend sw
     _ => new DisabledDesignGenerator(),
 });
 builder.Services.AddScoped<DraftSessionService>();
+builder.Services.AddScoped<CollectionService>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

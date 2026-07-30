@@ -1,0 +1,127 @@
+@page "/collections"
+@using Mocksmith.Core.Entities
+@using Mocksmith.Core.Services
+@inject CollectionService CollectionsService
+@inject NavigationManager Navigation
+
+<PageTitle>Collections — Mocksmith</PageTitle>
+
+<div class="collections-page">
+    <h1>Collections</h1>
+    <p class="muted">
+        A collection is a saved tag query (e.g. <code>dark AND dashboard</code>, parentheses and
+        OR supported) plus optional manual include/exclude pins made on the collection page.
+    </p>
+
+    <div class="import-form collection-create">
+        <div class="request-row">
+            <label>
+                Name
+                <input @bind="_newName" maxlength="200" placeholder="Dark dashboards" />
+            </label>
+            <label>
+                Tag query
+                <input @bind="_newQuery" maxlength="500" placeholder="dark AND dashboard" />
+            </label>
+        </div>
+        @if (_createError is not null)
+        {
+            <p class="form-error" role="alert">@_createError</p>
+        }
+        <button type="button" @onclick="CreateAsync">Create collection</button>
+    </div>
+
+    @if (_collections.Count == 0)
+    {
+        <div class="empty-state"><h2>No collections yet</h2></div>
+    }
+    else
+    {
+        <ul class="collection-rows">
+            @foreach (var entry in _collections)
+            {
+                <li class="collection-row">
+                    @if (_editingId == entry.Collection.Id)
+                    {
+                        <input class="edit-name" @bind="_editName" maxlength="200" />
+                        <input class="edit-query" @bind="_editQuery" maxlength="500" />
+                        <button type="button" @onclick="() => SaveEditAsync(entry.Collection.Id)">Save</button>
+                        <button type="button" class="link-button" @onclick="() => _editingId = null">Cancel</button>
+                    }
+                    else
+                    {
+                        <a class="collection-link" href="/collections/@entry.Collection.Id">
+                            <strong>@entry.Collection.Name</strong>
+                            <code>@entry.Collection.TagQuery</code>
+                        </a>
+                        <span class="muted">@entry.MemberCount member@(entry.MemberCount == 1 ? "" : "s")</span>
+                        <button type="button" class="tile-edit" @onclick="() => StartEdit(entry.Collection)">Edit</button>
+                        <button type="button" class="tile-edit" @onclick="() => DeleteAsync(entry.Collection.Id)">Delete</button>
+                    }
+                </li>
+            }
+        </ul>
+        @if (_editError is not null)
+        {
+            <p class="form-error" role="alert">@_editError</p>
+        }
+    }
+</div>
+
+@code {
+    private List<CollectionWithCount> _collections = [];
+    private string _newName = "";
+    private string _newQuery = "";
+    private string? _createError;
+    private int? _editingId;
+    private string _editName = "";
+    private string _editQuery = "";
+    private string? _editError;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync() => _collections = await CollectionsService.GetAllWithCountsAsync();
+
+    private async Task CreateAsync()
+    {
+        _createError = null;
+        try
+        {
+            var collection = await CollectionsService.CreateAsync(_newName, _newQuery);
+            Navigation.NavigateTo($"/collections/{collection.Id}");
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            _createError = ex.Message;
+        }
+    }
+
+    private void StartEdit(Collection collection)
+    {
+        _editingId = collection.Id;
+        _editName = collection.Name;
+        _editQuery = collection.TagQuery;
+        _editError = null;
+    }
+
+    private async Task SaveEditAsync(int collectionId)
+    {
+        _editError = null;
+        try
+        {
+            await CollectionsService.UpdateAsync(collectionId, _editName, _editQuery);
+            _editingId = null;
+            await RefreshAsync();
+        }
+        catch (Exception ex) when (ex is ArgumentException or FormatException)
+        {
+            _editError = ex.Message;
+        }
+    }
+
+    private async Task DeleteAsync(int collectionId)
+    {
+        await CollectionsService.DeleteAsync(collectionId);
+        await RefreshAsync();
+    }
+}
