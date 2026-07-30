@@ -19,7 +19,10 @@
 
 ## Status
 
-v1 under construction, issue-driven: see issues **M1–M8** for the roadmap. Design decisions and architecture live in [`aidlc-docs/`](aidlc-docs/inception/requirements/requirements.md).
+**v1 feature-complete** — all eight milestones (M1–M8) shipped via issue-driven PRs. Design
+decisions and architecture live in [`aidlc-docs/`](aidlc-docs/inception/requirements/requirements.md).
+In-app: `/usage` shows per-call and aggregate generation cost (subscription runs are marked as
+such), `/settings` sets the default model.
 
 ## Running
 
@@ -79,7 +82,18 @@ dotnet test                           # unit tests
 
 ## Backup
 
-The entire app state lives in `./data` (SQLite DB + sample HTML files + uploaded assets). Backup = stop the container, copy the folder, start it again.
+The entire app state lives in `./data` (SQLite DB + sample HTML files + uploaded assets):
+
+```bash
+docker compose stop
+cp -r data data-backup-$(date +%F)
+docker compose start
+```
+
+Restore = put the copied folder back at `./data` and `docker compose up -d`. The full
+stop → copy → destroy → restore → verify cycle was drilled successfully on 2026-07-30
+(restored instance healthy, login and DB intact). Stopping first matters: it checkpoints
+SQLite's WAL so the copy is a single consistent file.
 
 ## License
 

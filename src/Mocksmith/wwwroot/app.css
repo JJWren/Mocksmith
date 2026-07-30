@@ -1036,3 +1036,64 @@ a.tile-edit {
     display: inline-flex;
     align-items: center;
 }
+
+.usage-page,
+.settings-page {
+    max-width: 56rem;
+    margin: 0 auto;
+}
+
+.usage-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+}
+
+.usage-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 0.9rem 1.2rem;
+    background: var(--ms-surface);
+    border-radius: 0.6rem;
+    min-width: 10rem;
+}
+
+.usage-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+}
+
+.usage-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.usage-table th,
+.usage-table td {
+    text-align: left;
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid #2e2e36;
+}
+
+.usage-table th {
+    color: var(--ms-muted);
+    font-weight: 600;
+}
+
+.settings-page .import-form {
+    max-width: 28rem;
+}
+
+.settings-info {
+    margin-top: 2rem;
+    font-size: 0.9rem;
+}
+
+.settings-info h2 {
+    font-size: 1rem;
+    color: var(--ms-text);
+}
