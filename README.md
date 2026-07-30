@@ -19,20 +19,42 @@
 
 ## Status
 
-Pre-scaffold. Work is issue-driven: see issues **M1–M8** for the v1 roadmap. Design decisions and architecture live in [`aidlc-docs/`](aidlc-docs/inception/requirements/requirements.md).
+v1 under construction, issue-driven: see issues **M1–M8** for the roadmap. Design decisions and architecture live in [`aidlc-docs/`](aidlc-docs/inception/requirements/requirements.md).
 
-## Running (lands with M1)
+## Running
 
 ```bash
-docker compose up -d
+# 1) Generate a password hash for the single-user login
+docker compose run --rm mocksmith hash-password 'your-password'
+#    (or without Docker: dotnet run --project src/Mocksmith -- hash-password 'your-password')
+
+# 2) Provide env vars (shell or .env next to docker-compose.yml)
+#    MOCKSMITH_USERNAME=you
+#    MOCKSMITH_PASSWORD_HASH=<output of step 1>
+#    ANTHROPIC_API_KEY=<key>   # needed from M3 (generation)
+
+# 3) Build and start
+docker compose up -d --build
 ```
+
+The app listens on port 8080 and reports readiness at `/healthz`.
 
 | Env var | Purpose |
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude API key (secret — env only, never stored in the DB) |
 | `MOCKSMITH_USERNAME` | Single-user login name |
-| `MOCKSMITH_PASSWORD_HASH` | Password hash for the single user (hash one-liner documented with M1) |
-| `ASPNETCORE_URLS` | Bind address, e.g. `http://+:8080` |
+| `MOCKSMITH_PASSWORD_HASH` | PBKDF2 hash from `hash-password` (never the plain password) |
+| `MOCKSMITH_DATA_DIR` | Data directory (defaults to `/data` in the container) |
+| `ASPNETCORE_URLS` | Bind address (defaults to `http://+:8080` in the container) |
+
+## Local development
+
+```bash
+export MOCKSMITH_USERNAME=dev
+export MOCKSMITH_PASSWORD_HASH=$(dotnet run --project src/Mocksmith -- hash-password 'dev')
+dotnet run --project src/Mocksmith    # SQLite lands in src/Mocksmith/data/
+dotnet test                           # unit tests
+```
 
 ## Backup
 

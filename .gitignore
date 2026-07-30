@@ -481,6 +481,9 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 
-# Mocksmith runtime data (SQLite DB, samples, assets)
-data/
+# Mocksmith runtime data (SQLite DB, samples, assets).
+# Anchored paths only — a bare "data/" also matches source folders like
+# src/Mocksmith.Core/Data/ on case-insensitive filesystems.
+/data/
+/src/Mocksmith/data/
 .env

@@ -1,0 +1,22 @@
+services:
+  mocksmith:
+    build: .
+    image: mocksmith:latest
+    container_name: mocksmith
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Required from M3 (generation); optional until then.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - MOCKSMITH_USERNAME=${MOCKSMITH_USERNAME:?Set MOCKSMITH_USERNAME}
+      - MOCKSMITH_PASSWORD_HASH=${MOCKSMITH_PASSWORD_HASH:?Set MOCKSMITH_PASSWORD_HASH (docker compose run --rm mocksmith hash-password 'your-password')}
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
