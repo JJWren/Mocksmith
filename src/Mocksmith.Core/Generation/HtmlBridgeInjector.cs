@@ -95,6 +95,9 @@ public static partial class HtmlBridgeInjector
             }, true);
 
             window.addEventListener("message", function (e) {
+                if (e.source !== parent) {
+                    return; // only the hosting workspace may drive the bridge
+                }
                 var data = e.data || {};
                 if (data.type === "ms-apply-patch") {
                     var style = document.getElementById("mocksmith-live-patch");

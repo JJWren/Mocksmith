@@ -7,7 +7,9 @@ window.mocksmithWorkspace = {
         this.dispose();
         const handler = (event) => {
             const frame = document.getElementById(iframeId);
-            if (!frame || event.source !== frame.contentWindow) {
+            // The preview iframe is sandboxed without allow-same-origin, so legitimate
+            // bridge messages always arrive from its window with the opaque "null" origin.
+            if (!frame || event.source !== frame.contentWindow || event.origin !== "null") {
                 return;
             }
             const data = event.data || {};

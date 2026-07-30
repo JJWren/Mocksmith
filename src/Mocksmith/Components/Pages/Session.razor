@@ -108,15 +108,15 @@ else
                                 <h3>Rule <code>@selection.Selector</code></h3>
                                 <label>Font family
                                     <input value="@RuleValue(selection, "font-family")"
-                                           @onchange="e => SetRuleAsync(selection.Selector, "font-family", e.Value?.ToString())" />
+                                           @onchange='e => SetRuleAsync(selection.Selector, "font-family", e.Value?.ToString())' />
                                 </label>
                                 <label>Font size
                                     <input value="@RuleValue(selection, "font-size")"
-                                           @onchange="e => SetRuleAsync(selection.Selector, "font-size", e.Value?.ToString())" />
+                                           @onchange='e => SetRuleAsync(selection.Selector, "font-size", e.Value?.ToString())' />
                                 </label>
                                 <label>Font weight
                                     <select value="@RuleValue(selection, "font-weight")"
-                                            @onchange="e => SetRuleAsync(selection.Selector, "font-weight", e.Value?.ToString())">
+                                            @onchange='e => SetRuleAsync(selection.Selector, "font-weight", e.Value?.ToString())'>
                                         @foreach (var weight in FontWeights)
                                         {
                                             <option value="@weight">@weight</option>
@@ -125,11 +125,11 @@ else
                                 </label>
                                 <label>Text color
                                     <input value="@RuleValue(selection, "color")"
-                                           @onchange="e => SetRuleAsync(selection.Selector, "color", e.Value?.ToString())" />
+                                           @onchange='e => SetRuleAsync(selection.Selector, "color", e.Value?.ToString())' />
                                 </label>
                                 <label>Background
                                     <input value="@RuleValue(selection, "background-color")"
-                                           @onchange="e => SetRuleAsync(selection.Selector, "background-color", e.Value?.ToString())" />
+                                           @onchange='e => SetRuleAsync(selection.Selector, "background-color", e.Value?.ToString())' />
                                 </label>
                             </div>
                         }
@@ -356,6 +356,7 @@ else
             return;
         }
 
+        _error = null;
         await PushPatchAsync();
     }
 
@@ -377,6 +378,7 @@ else
             return;
         }
 
+        _error = null;
         await PushPatchAsync();
     }
 
@@ -552,7 +554,8 @@ else
         }
         catch (JSDisconnectedException)
         {
-            // circuit already gone; the browser context (and its listener) is too
+            // The circuit is already torn down, which means the browser context and its
+            // message listener were destroyed with it; there is nothing left to clean up.
         }
         finally
         {
