@@ -5,7 +5,8 @@
 @using Mocksmith.Core.Services
 @inject DraftSessionService Sessions
 @inject NavigationManager Navigation
-@implements IDisposable
+@inject IJSRuntime JS
+@implements IAsyncDisposable
 
 <PageTitle>Draft session — Mocksmith</PageTitle>
 
@@ -58,6 +59,12 @@ else
                 <button type="button" @onclick="RefineAsync" disabled="@(_generating || _selectedId is null || string.IsNullOrWhiteSpace(_refineText))">
                     Refine
                 </button>
+                <button type="button"
+                        class="@(_editMode ? "edit-toggle-on" : "")"
+                        @onclick="ToggleEditModeAsync"
+                        disabled="@(_generating || _selectedId is null)">
+                    @(_editMode ? "Exit edit" : "Edit elements")
+                </button>
                 <button type="button" class="save-button" @onclick="OpenSaveDialog" disabled="@(_generating || _selectedId is null)">
                     Save as sample…
                 </button>
@@ -75,14 +82,80 @@ else
                 <p class="form-error" role="alert">@_error</p>
             }
 
-            @if (_selectedId is { } selected)
-            {
-                <div class="session-preview">
-                    <iframe title="Draft preview"
-                            src="/sessions/@SessionId/iterations/@selected/file"
-                            sandbox="allow-scripts"></iframe>
-                </div>
-            }
+            <div class="session-workspace">
+                @if (_selectedId is { } selected)
+                {
+                    <div class="session-preview">
+                        <iframe id="workspace-frame"
+                                title="Draft preview"
+                                src="/sessions/@SessionId/iterations/@selected/file@(_editMode ? "?bridge=true" : "")"
+                                sandbox="allow-scripts"></iframe>
+                    </div>
+                }
+
+                @if (_editMode)
+                {
+                    <aside class="edit-panel">
+                        <h2>Direct edit</h2>
+                        <p class="muted panel-hint">
+                            Click an element in the preview. Edits target the element's rule
+                            (its class or tag), so all similar elements update together.
+                        </p>
+
+                        @if (_selection is { } selection)
+                        {
+                            <div class="panel-section">
+                                <h3>Rule <code>@selection.Selector</code></h3>
+                                <label>Font family
+                                    <input value="@RuleValue(selection, "font-family")"
+                                           @onchange="e => SetRuleAsync(selection.Selector, "font-family", e.Value?.ToString())" />
+                                </label>
+                                <label>Font size
+                                    <input value="@RuleValue(selection, "font-size")"
+                                           @onchange="e => SetRuleAsync(selection.Selector, "font-size", e.Value?.ToString())" />
+                                </label>
+                                <label>Font weight
+                                    <select value="@RuleValue(selection, "font-weight")"
+                                            @onchange="e => SetRuleAsync(selection.Selector, "font-weight", e.Value?.ToString())">
+                                        @foreach (var weight in FontWeights)
+                                        {
+                                            <option value="@weight">@weight</option>
+                                        }
+                                    </select>
+                                </label>
+                                <label>Text color
+                                    <input value="@RuleValue(selection, "color")"
+                                           @onchange="e => SetRuleAsync(selection.Selector, "color", e.Value?.ToString())" />
+                                </label>
+                                <label>Background
+                                    <input value="@RuleValue(selection, "background-color")"
+                                           @onchange="e => SetRuleAsync(selection.Selector, "background-color", e.Value?.ToString())" />
+                                </label>
+                            </div>
+                        }
+
+                        @if (_tokenValues.Count > 0)
+                        {
+                            <div class="panel-section">
+                                <h3>Design tokens</h3>
+                                @foreach (var token in _tokenValues.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList())
+                                {
+                                    <label class="token-row">
+                                        <span class="token-name">@token</span>
+                                        <input value="@_tokenValues[token]"
+                                               @onchange="e => SetTokenAsync(token, e.Value?.ToString())" />
+                                    </label>
+                                }
+                            </div>
+                        }
+
+                        <div class="panel-actions">
+                            <button type="button" class="link-button" @onclick="ResetEditsAsync" disabled="@_patch.IsEmpty">Reset edits</button>
+                            <button type="button" @onclick="ApplyEditsAsync" disabled="@(_patch.IsEmpty || _generating)">Apply as new iteration</button>
+                        </div>
+                    </aside>
+                }
+            </div>
         </section>
     </div>
 
@@ -127,6 +200,8 @@ else
 }
 
 @code {
+    private static readonly string[] FontWeights = ["300", "400", "500", "600", "700", "800", "900"];
+
     [Parameter]
     public Guid SessionId { get; set; }
 
@@ -145,6 +220,12 @@ else
     private CancellationTokenSource? _workCts;
     private bool _disposed;
 
+    private bool _editMode;
+    private BridgeSelection? _selection;
+    private readonly Dictionary<string, string> _tokenValues = new(StringComparer.Ordinal);
+    private DesignPatch _patch = new();
+    private DotNetObjectReference<Session>? _selfReference;
+
     private bool _showSaveDialog;
     private string _saveName = "";
     private string _saveSummary = "";
@@ -153,19 +234,178 @@ else
     private string? _saveError;
     private bool _saving;
 
+    private sealed record BridgeSelection(string Selector, string Tag, Dictionary<string, string> Computed);
+
     protected override async Task OnInitializedAsync()
     {
         await ReloadAsync();
         _loaded = true;
     }
 
-    protected override void OnAfterRender(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _selfReference = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("mocksmithWorkspace.init", _selfReference, "workspace-frame");
+
         // OnAfterRender only fires in the interactive circuit, so the fan-out kick-off
         // cannot double-run during prerender.
-        if (firstRender && Fanout is > 0 && _session is { Iterations.Count: 0 } && !_generating)
+        if (Fanout is > 0 && _session is { Iterations.Count: 0 } && !_generating)
         {
             StartWork(ct => Sessions.GenerateCandidatesAsync(SessionId, Fanout!.Value, MakeProgress(), ct));
+        }
+    }
+
+    [JSInvokable]
+    public Task OnBridgeMessage(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            switch (root.GetProperty("type").GetString())
+            {
+                case "ms-ready":
+                    _tokenValues.Clear();
+                    if (root.TryGetProperty("tokens", out var tokens) && tokens.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var property in tokens.EnumerateObject())
+                        {
+                            _tokenValues[property.Name] = property.Value.GetString() ?? "";
+                        }
+                    }
+
+                    break;
+                case "ms-selected":
+                    var computed = new Dictionary<string, string>(StringComparer.Ordinal);
+                    if (root.TryGetProperty("computed", out var computedElement) && computedElement.ValueKind == JsonValueKind.Object)
+                    {
+                        foreach (var property in computedElement.EnumerateObject())
+                        {
+                            computed[property.Name] = property.Value.GetString() ?? "";
+                        }
+                    }
+
+                    _selection = new BridgeSelection(
+                        root.GetProperty("selector").GetString() ?? "body",
+                        root.TryGetProperty("tag", out var tag) ? tag.GetString() ?? "" : "",
+                        computed);
+                    break;
+            }
+        }
+        catch (JsonException)
+        {
+            return Task.CompletedTask;
+        }
+        catch (KeyNotFoundException)
+        {
+            return Task.CompletedTask;
+        }
+
+        return InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ToggleEditModeAsync()
+    {
+        _editMode = !_editMode;
+        if (!_editMode)
+        {
+            _selection = null;
+            _patch = new DesignPatch();
+        }
+
+        await Task.CompletedTask;
+    }
+
+    private string RuleValue(BridgeSelection selection, string property)
+    {
+        if (_patch.Rules.TryGetValue(selection.Selector, out var rule) && rule.TryGetValue(property, out var patched))
+        {
+            return patched;
+        }
+
+        var computedKey = property switch
+        {
+            "font-family" => "fontFamily",
+            "font-size" => "fontSize",
+            "font-weight" => "fontWeight",
+            "background-color" => "backgroundColor",
+            _ => property,
+        };
+        return selection.Computed.GetValueOrDefault(computedKey, "");
+    }
+
+    private async Task SetRuleAsync(string selector, string property, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return;
+        }
+
+        try
+        {
+            _patch.SetRule(selector, property, value);
+        }
+        catch (ArgumentException ex)
+        {
+            _error = ex.Message;
+            return;
+        }
+
+        await PushPatchAsync();
+    }
+
+    private async Task SetTokenAsync(string token, string? value)
+    {
+        if (value is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _patch.SetToken(token, value);
+            _tokenValues[token] = value;
+        }
+        catch (ArgumentException ex)
+        {
+            _error = ex.Message;
+            return;
+        }
+
+        await PushPatchAsync();
+    }
+
+    private Task PushPatchAsync()
+        => JS.InvokeVoidAsync("mocksmithWorkspace.sendPatch", "workspace-frame", _patch.ToCss()).AsTask();
+
+    private async Task ResetEditsAsync()
+    {
+        _patch = new DesignPatch();
+        await JS.InvokeVoidAsync("mocksmithWorkspace.sendPatch", "workspace-frame", "");
+    }
+
+    private async Task ApplyEditsAsync()
+    {
+        if (_patch.IsEmpty)
+        {
+            return;
+        }
+
+        try
+        {
+            await Sessions.ApplyManualPatchAsync(SessionId, _patch.ToCss());
+            _patch = new DesignPatch();
+            _selection = null;
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
         }
     }
 
@@ -240,6 +480,7 @@ else
     private async Task SelectAsync(Guid iterationId)
     {
         _selectedId = iterationId;
+        _selection = null;
         await Sessions.SetActiveAsync(SessionId, iterationId);
     }
 
@@ -289,7 +530,7 @@ else
         _saveError = null;
         try
         {
-            var sample = await Sessions.SaveAsSampleAsync(SessionId, iterationId, _saveName, _saveSummary, _saveTags);
+            await Sessions.SaveAsSampleAsync(SessionId, iterationId, _saveName, _saveSummary, _saveTags);
             Navigation.NavigateTo("/");
         }
         catch (Exception ex)
@@ -299,12 +540,24 @@ else
         }
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         _disposed = true;
         _workCts?.Cancel();
         _workCts?.Dispose();
         _elapsedTimer?.Dispose();
+        try
+        {
+            await JS.InvokeVoidAsync("mocksmithWorkspace.dispose");
+        }
+        catch (JSDisconnectedException)
+        {
+            // circuit already gone; the browser context (and its listener) is too
+        }
+        finally
+        {
+            _selfReference?.Dispose();
+        }
     }
 
     private static List<string> ParseTags(string? tagsJson)

@@ -18,7 +18,7 @@ Tracked as GitHub issues; sequence respects dependencies (M1 → M2 → M3 → M
 - [x] M1 — Scaffold (solution, Docker, EF/SQLite, auth, healthcheck) — PR #9
 - [x] M2 — Catalog core (entities, dashboard, tags, filtering, manual import) — PR #11
 - [x] M3 — Generation (dual backends per #13: API + Claude Code CLI; request form, draft sessions, fan-out, refine) — PR #15
-- [ ] M4 — Edit panel (bridge.js, click-to-select, rule-level patches)
+- [x] M4 — Edit panel (bridge injection, click-to-select, rule-level patches, bake-on-save, saved-sample workspace entry) — PR #17
 - [ ] M5 — Variants (fork, name-upsert, grouping)
 - [ ] M6 — Collections (smart queries + pins)
 - [ ] M7 — Handoff (zip bundle, design brief, agent prompt)
