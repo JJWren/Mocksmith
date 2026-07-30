@@ -22,6 +22,9 @@ public class Sample
     /// <summary>Claude model that generated the sample, when generated in-app.</summary>
     public string? Model { get; set; }
 
+    /// <summary>Cached AI-written design brief (markdown); null until generated.</summary>
+    public string? BriefMarkdown { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 

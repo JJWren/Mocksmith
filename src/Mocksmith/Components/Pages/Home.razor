@@ -4,6 +4,7 @@
 @inject SampleQueryService Queries
 @inject DraftSessionService Sessions
 @inject CollectionService Collections
+@inject HandoffService Handoff
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -77,8 +78,20 @@
                     <div class="tile-body">
                         <div class="tile-title-row">
                             <h2>@sample.Name</h2>
-                            <button type="button" class="tile-edit" title="Open in workspace"
-                                    @onclick="() => EditSampleAsync(sample.Id)">Edit</button>
+                            <span class="tile-actions">
+                                <button type="button" class="tile-edit" title="Open in workspace"
+                                        @onclick="() => EditSampleAsync(sample.Id)">Edit</button>
+                                <a class="tile-edit" title="Download handoff bundle" href="/samples/@sample.Id/export">Export</a>
+                                <button type="button" class="tile-edit" title="Copy agent prompt to clipboard"
+                                        @onclick="() => CopyPromptAsync(sample.Id, null)">
+                                    @(_copiedKey == sample.Id.ToString() ? "Copied!" : "Prompt")
+                                </button>
+                                <button type="button" class="tile-edit" title="Regenerate the AI design brief"
+                                        disabled="@(_briefBusyId == sample.Id)"
+                                        @onclick="() => RegenerateBriefAsync(sample.Id)">
+                                    @(_briefBusyId == sample.Id ? "Brief…" : "AI brief")
+                                </button>
+                            </span>
                         </div>
                         @if (sample.Variants.Count > 0)
                         {
@@ -97,6 +110,11 @@
                                             <span class="muted variant-date">@variant.UpdatedAt.ToString("MMM d")</span>
                                             <button type="button" class="tile-edit"
                                                     @onclick="() => EditVariantAsync(variant.Id)">Edit</button>
+                                            <a class="tile-edit" href="/samples/@sample.Id/export?variantId=@variant.Id">Export</a>
+                                            <button type="button" class="tile-edit"
+                                                    @onclick="() => CopyPromptAsync(sample.Id, variant.Id)">
+                                                @(_copiedKey == variant.Id.ToString() ? "Copied!" : "Prompt")
+                                            </button>
                                         </li>
                                     }
                                 </ul>
@@ -168,6 +186,42 @@
         if (!_expandedTiles.Add(sampleId))
         {
             _expandedTiles.Remove(sampleId);
+        }
+    }
+
+    private string? _copiedKey;
+    private Guid? _briefBusyId;
+
+    private async Task CopyPromptAsync(Guid sampleId, Guid? variantId)
+    {
+        var prompt = await Handoff.BuildAgentPromptAsync(sampleId, variantId);
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", prompt);
+        var key = (variantId ?? sampleId).ToString();
+        _copiedKey = key;
+        _ = ClearCopiedAfterDelayAsync(key);
+    }
+
+    private async Task ClearCopiedAfterDelayAsync(string key)
+    {
+        await Task.Delay(2000);
+        // Only the owner of the current flash may clear it; a newer copy keeps its own.
+        if (_copiedKey == key)
+        {
+            _copiedKey = null;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RegenerateBriefAsync(Guid sampleId)
+    {
+        _briefBusyId = sampleId;
+        try
+        {
+            await Handoff.RegenerateBriefAsync(sampleId);
+        }
+        finally
+        {
+            _briefBusyId = null;
         }
     }
 

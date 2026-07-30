@@ -11,6 +11,37 @@ public class ClaudeApiGenerator(string apiKey) : IDesignGenerator
 {
     public string BackendName => "api";
 
+    public async Task<BriefResult> GenerateBriefAsync(BriefRequest request, CancellationToken ct = default)
+    {
+        AnthropicClient client = new() { ApiKey = apiKey };
+        var stopwatch = Stopwatch.StartNew();
+        var response = await client.Messages.Create(new MessageCreateParams
+        {
+            Model = request.Model,
+            MaxTokens = 4000,
+            Messages = [new() { Role = Role.User, Content = DesignPromptBuilder.BuildBriefPrompt(request) }],
+        });
+        stopwatch.Stop();
+
+        var text = new StringBuilder();
+        foreach (var block in response.Content)
+        {
+            if (block.TryPickText(out var textBlock))
+            {
+                text.Append(textBlock.Text);
+            }
+        }
+
+        var inputTokens = (int)response.Usage.InputTokens;
+        var outputTokens = (int)response.Usage.OutputTokens;
+        return new BriefResult(
+            text.ToString().Trim(),
+            inputTokens,
+            outputTokens,
+            ModelPricing.Estimate(request.Model, inputTokens, outputTokens),
+            stopwatch.ElapsedMilliseconds);
+    }
+
     public async Task<DesignGenerationResult> GenerateAsync(
         DesignGenerationRequest request,
         IProgress<GenerationProgress>? progress = null,

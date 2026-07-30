@@ -15,6 +15,55 @@ public class ClaudeCodeCliGenerator(MocksmithDataOptions dataOptions, string? cl
 {
     public string BackendName => "claude-code";
 
+    public async Task<BriefResult> GenerateBriefAsync(BriefRequest request, CancellationToken ct = default)
+    {
+        var workDir = Path.Combine(Path.GetFullPath(dataOptions.RootPath), "tmp", $"cli-brief-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(workDir);
+        try
+        {
+            var stopwatch = Stopwatch.StartNew();
+            var envelope = await RunCliAsync(
+                DesignPromptBuilder.BuildBriefPrompt(request),
+                request.Model,
+                allowWebFetch: false,
+                workDir,
+                ct);
+            stopwatch.Stop();
+
+            var markdown = (envelope.Result ?? "").Trim();
+            // The model occasionally fences the whole document despite instructions.
+            if (markdown.StartsWith("```", StringComparison.Ordinal))
+            {
+                var firstNewline = markdown.IndexOf('\n');
+                var lastFence = markdown.LastIndexOf("```", StringComparison.Ordinal);
+                if (firstNewline >= 0 && lastFence > firstNewline)
+                {
+                    markdown = markdown[(firstNewline + 1)..lastFence].Trim();
+                }
+            }
+
+            return new BriefResult(
+                markdown,
+                envelope.Usage?.InputTokens ?? 0,
+                envelope.Usage?.OutputTokens ?? 0,
+                EstimatedCostUsd: null,
+                stopwatch.ElapsedMilliseconds);
+        }
+        finally
+        {
+            try
+            {
+                Directory.Delete(workDir, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+        }
+    }
+
     public async Task<DesignGenerationResult> GenerateAsync(
         DesignGenerationRequest request,
         IProgress<GenerationProgress>? progress = null,
@@ -46,49 +95,11 @@ public class ClaudeCodeCliGenerator(MocksmithDataOptions dataOptions, string? cl
 
             prompt.Append(DesignPromptBuilder.BuildUserText(request));
 
-            var psi = BuildStartInfo(request, workDir);
             var stopwatch = Stopwatch.StartNew();
             progress?.Report(new GenerationProgress("starting-claude-cli"));
-
-            using var process = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start the claude CLI process.");
-
-            await process.StandardInput.WriteAsync(prompt.ToString());
-            process.StandardInput.Close();
-            progress?.Report(new GenerationProgress("generating"));
-
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
-            var stderrTask = process.StandardError.ReadToEndAsync(ct);
-
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
-            try
-            {
-                await process.WaitForExitAsync(timeout.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                try
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-                catch (InvalidOperationException)
-                {
-                }
-
-                throw new TimeoutException($"claude CLI did not finish within {timeoutSeconds}s.");
-            }
-
+            var allowWebFetch = !request.IsRefine && !string.IsNullOrWhiteSpace(request.SourceUrl);
+            var envelope = await RunCliAsync(prompt.ToString(), request.Model, allowWebFetch, workDir, ct, progress);
             stopwatch.Stop();
-            var stdout = await stdoutTask;
-            var stderr = await stderrTask;
-
-            var envelope = ParseEnvelope(stdout);
-            if (envelope.IsError || !string.Equals(envelope.Subtype, "success", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"claude CLI reported failure ({envelope.Subtype}): {Truncate(envelope.Result ?? stderr, 500)}");
-            }
 
             var payload = GenerationPayload.Parse(envelope.Result
                 ?? throw new InvalidOperationException("claude CLI returned no result text."));
@@ -121,14 +132,66 @@ public class ClaudeCodeCliGenerator(MocksmithDataOptions dataOptions, string? cl
         }
     }
 
-    private ProcessStartInfo BuildStartInfo(DesignGenerationRequest request, string workDir)
+    /// <summary>Runs one headless CLI invocation: prompt over stdin, JSON envelope from stdout.</summary>
+    private async Task<CliResultEnvelope> RunCliAsync(
+        string prompt,
+        string model,
+        bool allowWebFetch,
+        string workDir,
+        CancellationToken ct,
+        IProgress<GenerationProgress>? progress = null)
     {
-        var allowedTools = string.IsNullOrWhiteSpace(request.SourceUrl) ? "Read" : "Read WebFetch";
+        var psi = BuildStartInfo(model, allowWebFetch, workDir);
+        using var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start the claude CLI process.");
+
+        await process.StandardInput.WriteAsync(prompt);
+        process.StandardInput.Close();
+        progress?.Report(new GenerationProgress("generating"));
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+        var stderrTask = process.StandardError.ReadToEndAsync(ct);
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            catch (InvalidOperationException)
+            {
+            }
+
+            throw new TimeoutException($"claude CLI did not finish within {timeoutSeconds}s.");
+        }
+
+        var stdout = await stdoutTask;
+        var stderr = await stderrTask;
+
+        var envelope = ParseEnvelope(stdout);
+        if (envelope.IsError || !string.Equals(envelope.Subtype, "success", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"claude CLI reported failure ({envelope.Subtype}): {Truncate(envelope.Result ?? stderr, 500)}");
+        }
+
+        return envelope;
+    }
+
+    private ProcessStartInfo BuildStartInfo(string model, bool allowWebFetch, string workDir)
+    {
+        var allowedTools = allowWebFetch ? "Read WebFetch" : "Read";
         var cliArguments = new List<string>
         {
             "-p",
             "--output-format", "json",
-            "--model", request.Model,
+            "--model", model,
             "--allowed-tools", allowedTools,
             "--disallowed-tools", "Bash Write Edit",
         };
