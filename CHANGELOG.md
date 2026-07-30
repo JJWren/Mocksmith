@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/JJWren/Mocksmith/compare/v1.1.0...v1.2.0) (2026-07-30)
+
+
+### Features
+
+* dual-backend design generation with draft sessions and refine loop ([#15](https://github.com/JJWren/Mocksmith/issues/15)) ([d41cf3c](https://github.com/JJWren/Mocksmith/commit/d41cf3cfdbe1842133b4a9732c5c4e5410145d4d))
+
 ## [1.1.0](https://github.com/JJWren/Mocksmith/compare/v1.0.0...v1.1.0) (2026-07-30)
 
 
