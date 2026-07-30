@@ -1,4 +1,4 @@
-name: CI
+﻿name: CI
 
 on:
   push:
@@ -17,21 +17,21 @@ jobs:
       # Steps below are guarded so the workflow stays green until the
       # solution lands with M1 (hashFiles is empty pre-scaffold).
       - name: Setup .NET
-        if: hashFiles('**/*.sln') != ''
+        if: hashFiles('**/*.slnx') != ''
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
       - name: Restore
-        if: hashFiles('**/*.sln') != ''
+        if: hashFiles('**/*.slnx') != ''
         run: dotnet restore
 
       - name: Build
-        if: hashFiles('**/*.sln') != ''
+        if: hashFiles('**/*.slnx') != ''
         run: dotnet build --configuration Release --no-restore
 
       - name: Test
-        if: hashFiles('**/*.sln') != ''
+        if: hashFiles('**/*.slnx') != ''
         run: dotnet test --configuration Release --no-build --verbosity normal
 
   pr-title:
@@ -42,7 +42,7 @@ jobs:
       pull-requests: read
     steps:
       # Squash merges use the PR title as the commit on master, and release-please
-      # derives versions from those commits — so titles must be conventional.
+      # derives versions from those commits, so titles must be conventional.
       - uses: amannn/action-semantic-pull-request@v5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

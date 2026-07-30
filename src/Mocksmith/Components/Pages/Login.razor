@@ -1,0 +1,35 @@
+@page "/login"
+@attribute [AllowAnonymous]
+@attribute [ExcludeFromInteractiveRouting]
+
+<PageTitle>Sign in — Mocksmith</PageTitle>
+
+<div class="login-shell">
+    <form method="post" action="/auth/login" class="login-card">
+        <AntiforgeryToken />
+        <input type="hidden" name="returnUrl" value="@ReturnUrl" />
+        <h1>Mocksmith</h1>
+        <p class="login-tagline">The design-sample forge</p>
+        @if (Error is not null)
+        {
+            <p class="login-error" role="alert">Invalid username or password.</p>
+        }
+        <label>
+            Username
+            <input name="username" autocomplete="username" required autofocus />
+        </label>
+        <label>
+            Password
+            <input name="password" type="password" autocomplete="current-password" required />
+        </label>
+        <button type="submit">Sign in</button>
+    </form>
+</div>
+
+@code {
+    [SupplyParameterFromQuery]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+}

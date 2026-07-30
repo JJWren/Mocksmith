@@ -1,0 +1,17 @@
+@page "/"
+
+<PageTitle>Mocksmith</PageTitle>
+
+<main class="home">
+    <h1>Mocksmith</h1>
+    <p>The forge is lit. The sample dashboard arrives with M2.</p>
+    <AuthorizeView>
+        <Authorized>
+            <p class="home-user">Signed in as <strong>@context.User.Identity?.Name</strong></p>
+            <form method="post" action="/auth/logout">
+                <AntiforgeryToken />
+                <button type="submit" class="link-button">Sign out</button>
+            </form>
+        </Authorized>
+    </AuthorizeView>
+</main>

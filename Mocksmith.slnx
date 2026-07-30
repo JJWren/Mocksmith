@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Mocksmith.Core/Mocksmith.Core.csproj" />
+    <Project Path="src/Mocksmith/Mocksmith.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Mocksmith.Tests/Mocksmith.Tests.csproj" />
+  </Folder>
+</Solution>
