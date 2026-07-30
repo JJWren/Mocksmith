@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/JJWren/Mocksmith/compare/v1.6.0...v1.7.0) (2026-07-30)
+
+
+### Features
+
+* usage and cost view, settings page, verified backup procedure ([#25](https://github.com/JJWren/Mocksmith/issues/25)) ([05489db](https://github.com/JJWren/Mocksmith/commit/05489dbd18dc666143875b3d0b2387e25d83d312))
+
 ## [1.6.0](https://github.com/JJWren/Mocksmith/compare/v1.5.0...v1.6.0) (2026-07-30)
 
 
