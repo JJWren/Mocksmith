@@ -50,6 +50,13 @@ public static class PasswordHasher
             return false;
         }
 
+        // Fail closed on malformed input: an empty expected hash would otherwise
+        // compare equal to a zero-length derivation and accept any password.
+        if (salt.Length != SaltSize || expected.Length != HashSize)
+        {
+            return false;
+        }
+
         var actual = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, expected.Length);
         return CryptographicOperations.FixedTimeEquals(actual, expected);
     }

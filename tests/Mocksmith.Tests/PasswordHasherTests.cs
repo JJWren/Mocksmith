@@ -51,4 +51,27 @@ public class PasswordHasherTests
     {
         Assert.False(PasswordHasher.Verify("anything", encoded));
     }
+
+    [Fact]
+    public void Verify_EmptyHashSegment_FailsClosed()
+    {
+        // A trailing dot decodes to an empty expected hash; zero-length PBKDF2
+        // output would compare equal to it, so this must be rejected outright.
+        var parts = PasswordHasher.Hash("pw").Split('.');
+        var malformed = $"{parts[0]}.{parts[1]}.{parts[2]}.";
+
+        Assert.False(PasswordHasher.Verify("pw", malformed));
+        Assert.False(PasswordHasher.Verify("anything-else", malformed));
+    }
+
+    [Fact]
+    public void Verify_WrongSaltOrHashLength_Fails()
+    {
+        var parts = PasswordHasher.Hash("pw").Split('.');
+        var shortSalt = Convert.ToBase64String(new byte[4]);
+        var shortHash = Convert.ToBase64String(new byte[8]);
+
+        Assert.False(PasswordHasher.Verify("pw", $"{parts[0]}.{parts[1]}.{shortSalt}.{parts[3]}"));
+        Assert.False(PasswordHasher.Verify("pw", $"{parts[0]}.{parts[1]}.{parts[2]}.{shortHash}"));
+    }
 }
