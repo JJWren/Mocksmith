@@ -31,7 +31,7 @@ public partial class HandoffService(
         var (sample, variant, html) = await LoadAsync(sampleId, variantId, ct);
         var tags = sample.SampleTags.Select(st => st.Tag!.Name).ToList();
         var tokensJson = PrettyTokens(html, sample);
-        var brief = sample.BriefMarkdown ?? BuildTemplateBrief(sample, variant, html, tags);
+        var brief = SelectBrief(sample, variant, html, tags);
         var metadata = BuildMetadataJson(sample, variant, tags);
 
         using var buffer = new MemoryStream();
@@ -66,7 +66,7 @@ public partial class HandoffService(
     {
         var (sample, variant, html) = await LoadAsync(sampleId, variantId, ct);
         var tags = sample.SampleTags.Select(st => st.Tag!.Name).ToList();
-        var brief = sample.BriefMarkdown ?? BuildTemplateBrief(sample, variant, html, tags);
+        var brief = SelectBrief(sample, variant, html, tags);
 
         var builder = new StringBuilder();
         builder.AppendLine("# Design handoff: implement this design in a real application");
@@ -120,6 +120,15 @@ public partial class HandoffService(
         await db.SaveChangesAsync(ct);
         return result.Markdown;
     }
+
+    /// <summary>
+    /// The cached AI brief describes the base sample only; variant exports always use the
+    /// template brief, which is built from the variant's own HTML and cannot contradict it.
+    /// </summary>
+    private static string SelectBrief(Sample sample, Variant? variant, string html, IReadOnlyList<string> tags)
+        => variant is null && sample.BriefMarkdown is not null
+            ? sample.BriefMarkdown
+            : BuildTemplateBrief(sample, variant, html, tags);
 
     /// <summary>Deterministic brief assembled from stored data — used until an AI brief is cached.</summary>
     public static string BuildTemplateBrief(Sample sample, Variant? variant, string html, IReadOnlyList<string> tags)
@@ -209,7 +218,13 @@ public partial class HandoffService(
                 ?? throw new InvalidOperationException($"Variant {vid} not found on this sample.");
         }
 
-        var html = await fileStore.ReadTextAsync(variant?.HtmlFile ?? sample.HtmlFile, ct);
+        var htmlFile = variant?.HtmlFile ?? sample.HtmlFile;
+        if (!fileStore.Exists(htmlFile))
+        {
+            throw new InvalidOperationException($"Stored HTML for {(variant is null ? "sample" : "variant")} is missing on disk.");
+        }
+
+        var html = await fileStore.ReadTextAsync(htmlFile, ct);
         return (sample, variant, html);
     }
 
@@ -243,7 +258,9 @@ public partial class HandoffService(
             model = sample.Model,
             createdAt = sample.CreatedAt,
             updatedAt = sample.UpdatedAt,
-            variant = variant is null ? null : new { variant.Name, variant.UpdatedAt, patchCss = variant.PatchJson },
+            variant = variant is null
+                ? null
+                : new { name = variant.Name, updatedAt = variant.UpdatedAt, patchCss = variant.PatchJson },
         }, new JsonSerializerOptions { WriteIndented = true });
 
     private static async Task WriteEntryAsync(ZipArchive zip, string name, string content, CancellationToken ct)

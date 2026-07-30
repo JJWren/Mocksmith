@@ -119,7 +119,38 @@ public class HandoffServiceTests : IDisposable
         using var zip = new ZipArchive(new MemoryStream(content), ZipArchiveMode.Read);
         Assert.Contains("Dark Steam", ReadEntry(zip, "sample.html"));
         using var metadata = JsonDocument.Parse(ReadEntry(zip, "metadata.json"));
-        Assert.Equal("Dark", metadata.RootElement.GetProperty("variant").GetProperty("Name").GetString());
+        Assert.Equal("Dark", metadata.RootElement.GetProperty("variant").GetProperty("name").GetString());
+    }
+
+    [Fact]
+    public async Task VariantBundle_IgnoresCachedSampleBrief_AndUsesVariantAwareTemplate()
+    {
+        var sample = await ImportSampleAsync();
+        await _service.RegenerateBriefAsync(sample.Id); // caches the base-sample AI brief
+        var variant = new Variant
+        {
+            Id = Guid.NewGuid(),
+            SampleId = sample.Id,
+            Name = "Dark",
+            HtmlFile = "",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+        variant.HtmlFile = _fileStore.VariantHtmlRelativePath(sample.Id, variant.Id);
+        await _fileStore.WriteTextAsync(variant.HtmlFile, SampleHtml.Replace("#16161a", "#000000"));
+        await using (var db = _factory.CreateDbContext())
+        {
+            db.Variants.Add(variant);
+            await db.SaveChangesAsync();
+        }
+
+        var (content, _) = await _service.BuildBundleAsync(sample.Id, variant.Id);
+
+        using var zip = new ZipArchive(new MemoryStream(content), ZipArchiveMode.Read);
+        var brief = ReadEntry(zip, "design-brief.md");
+        Assert.DoesNotContain("AI brief", brief);
+        Assert.Contains("Dark variant", brief);
+        Assert.Contains("#000000", brief);
     }
 
     [Fact]

@@ -196,15 +196,20 @@
     {
         var prompt = await Handoff.BuildAgentPromptAsync(sampleId, variantId);
         await JS.InvokeVoidAsync("navigator.clipboard.writeText", prompt);
-        _copiedKey = (variantId ?? sampleId).ToString();
-        _ = ClearCopiedAfterDelayAsync();
+        var key = (variantId ?? sampleId).ToString();
+        _copiedKey = key;
+        _ = ClearCopiedAfterDelayAsync(key);
     }
 
-    private async Task ClearCopiedAfterDelayAsync()
+    private async Task ClearCopiedAfterDelayAsync(string key)
     {
         await Task.Delay(2000);
-        _copiedKey = null;
-        await InvokeAsync(StateHasChanged);
+        // Only the owner of the current flash may clear it; a newer copy keeps its own.
+        if (_copiedKey == key)
+        {
+            _copiedKey = null;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task RegenerateBriefAsync(Guid sampleId)
