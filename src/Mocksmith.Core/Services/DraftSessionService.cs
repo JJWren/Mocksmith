@@ -68,6 +68,105 @@ public class DraftSessionService(
         return session;
     }
 
+    /// <summary>
+    /// Opens the workspace on a saved sample: a new session seeded with the sample's
+    /// HTML as iteration 0, carrying its metadata so refine/panel/save flows work unchanged.
+    /// </summary>
+    public async Task<DraftSession> StartSessionFromSampleAsync(Guid sampleId, CancellationToken ct = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var sample = await db.Samples
+            .AsNoTracking()
+            .Include(s => s.SampleTags).ThenInclude(st => st.Tag)
+            .FirstOrDefaultAsync(s => s.Id == sampleId, ct)
+            ?? throw new InvalidOperationException($"Sample {sampleId} not found.");
+
+        var settings = await db.Settings.AsNoTracking().FirstAsync(ct);
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var session = new DraftSession
+        {
+            Id = Guid.NewGuid(),
+            Status = DraftSessionStatus.Active,
+            CreatedAt = now,
+            Description = string.IsNullOrWhiteSpace(sample.Description) ? sample.Name : sample.Description,
+            SourceUrl = sample.SourceUrl,
+            Model = sample.Model ?? settings.DefaultModel,
+        };
+
+        var html = await fileStore.ReadTextAsync(sample.HtmlFile, ct);
+        var relativePath = fileStore.SessionIterationRelativePath(session.Id, 0);
+        await fileStore.WriteTextAsync(relativePath, html, ct);
+        session.Iterations.Add(new DraftIteration
+        {
+            Id = Guid.NewGuid(),
+            DraftSession = session,
+            Index = 0,
+            CandidateGroup = 0,
+            InstructionText = null,
+            HtmlFile = relativePath,
+            Model = session.Model,
+            IsActive = true,
+            CreatedAt = now,
+            Name = sample.Name,
+            Summary = sample.Summary,
+            TagsJson = JsonSerializer.Serialize(sample.SampleTags.Select(st => st.Tag!.Name).ToList()),
+        });
+
+        db.DraftSessions.Add(session);
+        await db.SaveChangesAsync(ct);
+        return session;
+    }
+
+    /// <summary>
+    /// Bakes a direct-edit panel patch into the active iteration's HTML as a new
+    /// active iteration, keeping the panel's edits inside the normal iteration history.
+    /// </summary>
+    public async Task ApplyManualPatchAsync(Guid sessionId, string patchCss, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(patchCss))
+        {
+            return;
+        }
+
+        var session = await GetSessionAsync(sessionId, ct)
+            ?? throw new InvalidOperationException($"Session {sessionId} not found.");
+        var active = session.Iterations.FirstOrDefault(i => i.IsActive)
+            ?? throw new InvalidOperationException("No active iteration to edit.");
+
+        var html = await fileStore.ReadTextAsync(active.HtmlFile, ct);
+
+        // Concatenate with any previously baked patch (later rules win the cascade)
+        // so applies accumulate across separate workspace visits instead of replacing.
+        var existing = DesignPatch.ExtractExistingCss(html);
+        var combined = string.IsNullOrWhiteSpace(existing) ? patchCss : existing + "\n" + patchCss;
+        var baked = DesignPatch.Bake(html, combined);
+
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var nextIndex = await NextIterationIndexAsync(db, sessionId, ct);
+        var relativePath = fileStore.SessionIterationRelativePath(sessionId, nextIndex);
+        await fileStore.WriteTextAsync(relativePath, baked, ct);
+        var iteration = new DraftIteration
+        {
+            Id = Guid.NewGuid(),
+            DraftSessionId = sessionId,
+            Index = nextIndex,
+            CandidateGroup = active.CandidateGroup,
+            InstructionText = "manual edit (panel)",
+            HtmlFile = relativePath,
+            Model = active.Model,
+            IsActive = true,
+            CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
+            Name = active.Name,
+            Summary = active.Summary,
+            TagsJson = active.TagsJson,
+        };
+        db.DraftIterations.Add(iteration);
+        await db.SaveChangesAsync(ct);
+        await db.DraftIterations
+            .Where(i => i.DraftSessionId == sessionId && i.Id != iteration.Id && i.IsActive)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(i => i.IsActive, false), ct);
+    }
+
     public async Task<DraftSession?> GetSessionAsync(Guid sessionId, CancellationToken ct = default)
     {
         await using var db = await contextFactory.CreateDbContextAsync(ct);

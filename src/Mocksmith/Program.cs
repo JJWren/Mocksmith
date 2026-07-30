@@ -127,9 +127,11 @@ app.MapGet("/samples/{id:guid}/file", async Task<IResult> (
   .WithMetadata(new SkipStatusCodePagesAttribute());
 
 // Draft iteration previews, served under the same sandbox/CSP rules as samples.
+// ?bridge=true injects the workspace bridge (serve-time only, never persisted).
 app.MapGet("/sessions/{sessionId:guid}/iterations/{iterationId:guid}/file", async Task<IResult> (
     Guid sessionId,
     Guid iterationId,
+    [FromQuery] bool bridge,
     HttpContext context,
     MocksmithDbContext db,
     SampleFileStore files) =>
@@ -144,6 +146,11 @@ app.MapGet("/sessions/{sessionId:guid}/iterations/{iterationId:guid}/file", asyn
     context.Response.Headers.ContentSecurityPolicy =
         "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:;";
     var html = await files.ReadTextAsync(iteration.HtmlFile);
+    if (bridge)
+    {
+        html = HtmlBridgeInjector.Inject(html);
+    }
+
     return Results.Content(html, "text/html");
 }).RequireAuthorization()
   .WithMetadata(new SkipStatusCodePagesAttribute());

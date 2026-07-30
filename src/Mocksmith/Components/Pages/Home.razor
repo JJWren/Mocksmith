@@ -2,6 +2,8 @@
 @using Mocksmith.Core.Entities
 @using Mocksmith.Core.Services
 @inject SampleQueryService Queries
+@inject DraftSessionService Sessions
+@inject NavigationManager Navigation
 @inject IJSRuntime JS
 
 <PageTitle>Mocksmith — Dashboard</PageTitle>
@@ -32,7 +34,16 @@
     {
         <div class="empty-state">
             <h2>No samples @(_filtered ? "match the current filter" : "yet")</h2>
-            <p>@(_filtered ? "Clear the search or tag filters to see the full catalog." : "Import one to light the forge, or wait for generation to arrive with M3.")</p>
+            <p>
+                @if (_filtered)
+                {
+                    <text>Clear the search or tag filters to see the full catalog.</text>
+                }
+                else
+                {
+                    <text><a href="/generate">Generate one</a> or <a href="/import">import one</a> to light the forge.</text>
+                }
+            </p>
         </div>
     }
     else
@@ -49,7 +60,11 @@
                                 tabindex="-1"></iframe>
                     </div>
                     <div class="tile-body">
-                        <h2>@sample.Name</h2>
+                        <div class="tile-title-row">
+                            <h2>@sample.Name</h2>
+                            <button type="button" class="tile-edit" title="Open in workspace"
+                                    @onclick="() => EditSampleAsync(sample.Id)">Edit</button>
+                        </div>
                         @if (sample.Variants.Count > 0)
                         {
                             <span class="variant-badge">@sample.Variants.Count variant@(sample.Variants.Count == 1 ? "" : "s")</span>
@@ -97,6 +112,12 @@
     private async Task RefreshAsync()
     {
         _samples = await Queries.SearchAsync(new SampleFilter(_searchText, [.. _selectedTags]));
+    }
+
+    private async Task EditSampleAsync(Guid sampleId)
+    {
+        var session = await Sessions.StartSessionFromSampleAsync(sampleId);
+        Navigation.NavigateTo($"/sessions/{session.Id}");
     }
 
     private async Task OnSearchInputAsync(ChangeEventArgs e)
