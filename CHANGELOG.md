@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/JJWren/Mocksmith/compare/v1.4.0...v1.5.0) (2026-07-30)
+
+
+### Features
+
+* smart collections with tag queries and manual pins ([#21](https://github.com/JJWren/Mocksmith/issues/21)) ([8a2fc7a](https://github.com/JJWren/Mocksmith/commit/8a2fc7ab1f645871211287e234b58dd4196d0d14))
+
 ## [1.4.0](https://github.com/JJWren/Mocksmith/compare/v1.3.0...v1.4.0) (2026-07-30)
 
 
