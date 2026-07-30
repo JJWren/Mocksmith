@@ -126,6 +126,28 @@ app.MapGet("/samples/{id:guid}/file", async Task<IResult> (
 }).RequireAuthorization()
   .WithMetadata(new SkipStatusCodePagesAttribute());
 
+// Variant HTML, served under the same sandbox/CSP rules as samples.
+app.MapGet("/samples/{sampleId:guid}/variants/{variantId:guid}/file", async Task<IResult> (
+    Guid sampleId,
+    Guid variantId,
+    HttpContext context,
+    MocksmithDbContext db,
+    SampleFileStore files) =>
+{
+    var variant = await db.Variants.AsNoTracking()
+        .FirstOrDefaultAsync(v => v.Id == variantId && v.SampleId == sampleId);
+    if (variant is null || !files.Exists(variant.HtmlFile))
+    {
+        return Results.NotFound();
+    }
+
+    context.Response.Headers.ContentSecurityPolicy =
+        "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:;";
+    var html = await files.ReadTextAsync(variant.HtmlFile);
+    return Results.Content(html, "text/html");
+}).RequireAuthorization()
+  .WithMetadata(new SkipStatusCodePagesAttribute());
+
 // Draft iteration previews, served under the same sandbox/CSP rules as samples.
 // ?bridge=true injects the workspace bridge (serve-time only, never persisted).
 app.MapGet("/sessions/{sessionId:guid}/iterations/{iterationId:guid}/file", async Task<IResult> (

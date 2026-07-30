@@ -67,7 +67,25 @@
                         </div>
                         @if (sample.Variants.Count > 0)
                         {
-                            <span class="variant-badge">@sample.Variants.Count variant@(sample.Variants.Count == 1 ? "" : "s")</span>
+                            <button type="button" class="variant-badge variant-toggle"
+                                    aria-expanded="@_expandedTiles.Contains(sample.Id)"
+                                    @onclick="() => ToggleVariants(sample.Id)">
+                                @sample.Variants.Count variant@(sample.Variants.Count == 1 ? "" : "s") @(_expandedTiles.Contains(sample.Id) ? "▾" : "▸")
+                            </button>
+                            @if (_expandedTiles.Contains(sample.Id))
+                            {
+                                <ul class="variant-list">
+                                    @foreach (var variant in sample.Variants.OrderBy(v => v.Name))
+                                    {
+                                        <li class="variant-row">
+                                            <span class="variant-name">@variant.Name</span>
+                                            <span class="muted variant-date">@variant.UpdatedAt.ToString("MMM d")</span>
+                                            <button type="button" class="tile-edit"
+                                                    @onclick="() => EditVariantAsync(variant.Id)">Edit</button>
+                                        </li>
+                                    }
+                                </ul>
+                            }
                         }
                         @if (!string.IsNullOrWhiteSpace(sample.Summary))
                         {
@@ -91,6 +109,7 @@
 
 @code {
     private string _searchText = "";
+    private readonly HashSet<Guid> _expandedTiles = [];
     private readonly HashSet<string> _selectedTags = [];
     private List<Tag> _allTags = [];
     private List<Sample> _samples = [];
@@ -118,6 +137,20 @@
     {
         var session = await Sessions.StartSessionFromSampleAsync(sampleId);
         Navigation.NavigateTo($"/sessions/{session.Id}");
+    }
+
+    private async Task EditVariantAsync(Guid variantId)
+    {
+        var session = await Sessions.StartSessionFromVariantAsync(variantId);
+        Navigation.NavigateTo($"/sessions/{session.Id}");
+    }
+
+    private void ToggleVariants(Guid sampleId)
+    {
+        if (!_expandedTiles.Add(sampleId))
+        {
+            _expandedTiles.Remove(sampleId);
+        }
     }
 
     private async Task OnSearchInputAsync(ChangeEventArgs e)

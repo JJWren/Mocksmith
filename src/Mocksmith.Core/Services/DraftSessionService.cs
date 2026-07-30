@@ -91,6 +91,7 @@ public class DraftSessionService(
             Description = string.IsNullOrWhiteSpace(sample.Description) ? sample.Name : sample.Description,
             SourceUrl = sample.SourceUrl,
             Model = sample.Model ?? settings.DefaultModel,
+            SourceSampleId = sample.Id,
         };
 
         var html = await fileStore.ReadTextAsync(sample.HtmlFile, ct);
@@ -115,6 +116,145 @@ public class DraftSessionService(
         db.DraftSessions.Add(session);
         await db.SaveChangesAsync(ct);
         return session;
+    }
+
+    /// <summary>
+    /// Opens the workspace on a variant: like <see cref="StartSessionFromSampleAsync"/> but
+    /// seeded with the variant's HTML and name, so save-as-variant prefills to an upsert.
+    /// </summary>
+    public async Task<DraftSession> StartSessionFromVariantAsync(Guid variantId, CancellationToken ct = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var variant = await db.Variants.AsNoTracking().FirstOrDefaultAsync(v => v.Id == variantId, ct)
+            ?? throw new InvalidOperationException($"Variant {variantId} not found.");
+
+        var session = await StartSessionFromSampleAsync(variant.SampleId, ct);
+
+        var html = await fileStore.ReadTextAsync(variant.HtmlFile, ct);
+        await using var updateDb = await contextFactory.CreateDbContextAsync(ct);
+        var iteration = await updateDb.DraftIterations.FirstAsync(i => i.DraftSessionId == session.Id, ct);
+        await fileStore.WriteTextAsync(iteration.HtmlFile, html, ct);
+        iteration.Name = variant.Name;
+        await updateDb.SaveChangesAsync(ct);
+        return session;
+    }
+
+    /// <summary>Overwrites the origin sample in place with an iteration's content and metadata.</summary>
+    public async Task<Sample> OverwriteOriginAsync(
+        Guid sessionId,
+        Guid iterationId,
+        string name,
+        string summary,
+        IEnumerable<string> tags,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("A sample name is required.", nameof(name));
+        }
+
+        var session = await GetSessionAsync(sessionId, ct)
+            ?? throw new InvalidOperationException($"Session {sessionId} not found.");
+        var originId = session.SourceSampleId
+            ?? throw new InvalidOperationException("This session has no origin sample to overwrite.");
+        var iteration = session.Iterations.FirstOrDefault(i => i.Id == iterationId)
+            ?? throw new InvalidOperationException("Iteration not found in session.");
+
+        var html = await fileStore.ReadTextAsync(iteration.HtmlFile, ct);
+
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var sample = await db.Samples.Include(s => s.SampleTags).FirstOrDefaultAsync(s => s.Id == originId, ct)
+            ?? throw new InvalidOperationException("Origin sample no longer exists.");
+
+        await fileStore.WriteTextAsync(sample.HtmlFile, html, ct);
+        sample.Name = name.Trim();
+        sample.Summary = summary.Trim();
+        sample.Model = iteration.Model;
+        sample.TokensJson = TokenContractValidator.TryExtractManifestJson(html);
+        sample.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
+
+        sample.SampleTags.Clear();
+        var tagNames = TagNormalizer.NormalizeSet(tags);
+        var existing = await db.Tags.Where(t => tagNames.Contains(t.Name)).ToListAsync(ct);
+        foreach (var tagName in tagNames)
+        {
+            var tag = existing.FirstOrDefault(t => t.Name == tagName) ?? new Tag { Name = tagName };
+            sample.SampleTags.Add(new SampleTag { SampleId = sample.Id, Tag = tag });
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        // Only mark the session saved once the overwrite has actually committed.
+        await db.DraftSessions
+            .Where(s => s.Id == sessionId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(s => s.Status, DraftSessionStatus.Saved), ct);
+        return sample;
+    }
+
+    /// <summary>
+    /// Saves an iteration as a named variant of the origin sample. The name is an upsert
+    /// key (unique per sample): an existing variant with that name is overwritten in place.
+    /// </summary>
+    public async Task<Variant> SaveAsVariantAsync(
+        Guid sessionId,
+        Guid iterationId,
+        string variantName,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(variantName))
+        {
+            throw new ArgumentException("A variant name is required.", nameof(variantName));
+        }
+
+        var session = await GetSessionAsync(sessionId, ct)
+            ?? throw new InvalidOperationException($"Session {sessionId} not found.");
+        var originId = session.SourceSampleId
+            ?? throw new InvalidOperationException("This session has no origin sample for a variant.");
+        var iteration = session.Iterations.FirstOrDefault(i => i.Id == iterationId)
+            ?? throw new InvalidOperationException("Iteration not found in session.");
+
+        var html = await fileStore.ReadTextAsync(iteration.HtmlFile, ct);
+        var trimmedName = variantName.Trim();
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var variant = await db.Variants.FirstOrDefaultAsync(v => v.SampleId == originId && v.Name == trimmedName, ct);
+        var created = variant is null;
+        if (variant is null)
+        {
+            variant = new Variant
+            {
+                Id = Guid.NewGuid(),
+                SampleId = originId,
+                Name = trimmedName,
+                HtmlFile = "",
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            variant.HtmlFile = fileStore.VariantHtmlRelativePath(originId, variant.Id);
+            db.Variants.Add(variant);
+        }
+        else
+        {
+            variant.UpdatedAt = now;
+        }
+
+        variant.PatchJson = DesignPatch.ExtractExistingCss(html);
+        await fileStore.WriteTextAsync(variant.HtmlFile, html, ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch when (created)
+        {
+            // Compensate the file write for a variant row that never committed.
+            fileStore.TryDelete(variant.HtmlFile);
+            throw;
+        }
+        await db.DraftSessions
+            .Where(s => s.Id == sessionId)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(s => s.Status, DraftSessionStatus.Saved), ct);
+        return variant;
     }
 
     /// <summary>

@@ -14,6 +14,8 @@ public class SampleFileStore(MocksmithDataOptions options)
 
     public string SessionIterationRelativePath(Guid sessionId, int index) => $"sessions/{sessionId}/iter-{index}.html";
 
+    public string VariantHtmlRelativePath(Guid sampleId, Guid variantId) => $"samples/{sampleId}/variants/{variantId}.html";
+
     public string AssetRelativePath(Guid assetId, string extension) => $"assets/{assetId}.{extension.TrimStart('.')}";
 
     public async Task WriteTextAsync(string relativePath, string text, CancellationToken ct = default)

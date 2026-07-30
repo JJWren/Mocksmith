@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Mocksmith.Core.Data;
 
@@ -10,9 +11,11 @@ using Mocksmith.Core.Data;
 namespace Mocksmith.Core.Data.Migrations
 {
     [DbContext(typeof(MocksmithDbContext))]
-    partial class MocksmithDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260730224555_AddVariantSupport")]
+    partial class AddVariantSupport
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
