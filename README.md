@@ -39,9 +39,30 @@ docker compose up -d --build
 
 The app listens on port 8080 and reports readiness at `/healthz`.
 
+### Generation backends
+
+Generation runs through one of two interchangeable backends behind `IDesignGenerator`:
+
+| Backend | Credential | How |
+|---|---|---|
+| `api` | `ANTHROPIC_API_KEY` | Anthropic Messages API (official SDK); per-call cost logged |
+| `claude-code` | `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or a logged-in local `claude` CLI | Claude Code CLI headless mode — rides your Claude subscription, no API billing |
+
+`MOCKSMITH_GENERATOR=api|claude-code` selects explicitly; otherwise the app auto-detects
+(API key first, then OAuth token / installed CLI). For the subscription backend in Docker,
+use the **full** image variant, which bundles Node + the Claude Code CLI:
+
+```bash
+claude setup-token   # once, on any machine with your Claude login — put the token in .env
+docker compose -f docker-compose.yml -f docker-compose.full.yml up -d --build
+```
+
 | Env var | Purpose |
 |---|---|
-| `ANTHROPIC_API_KEY` | Claude API key (secret — env only, never stored in the DB) |
+| `ANTHROPIC_API_KEY` | Claude API key for the `api` backend (secret — env only, never stored in the DB) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Subscription token for the `claude-code` backend (`claude setup-token`) |
+| `MOCKSMITH_GENERATOR` | Backend override: `api` or `claude-code` (default: auto-detect) |
+| `MOCKSMITH_GENERATION_TIMEOUT_SECONDS` | CLI generation timeout (default 600) |
 | `MOCKSMITH_USERNAME` | Single-user login name |
 | `MOCKSMITH_PASSWORD_HASH` | PBKDF2 hash from `hash-password` (never the plain password) |
 | `MOCKSMITH_DATA_DIR` | Data directory (defaults to `/data` in the container) |

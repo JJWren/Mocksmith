@@ -113,7 +113,14 @@ public class MocksmithDbContext(DbContextOptions<MocksmithDbContext> options) : 
         modelBuilder.Entity<GenerationLog>(entity =>
         {
             entity.Property(l => l.Model).HasMaxLength(100);
+            entity.Property(l => l.Backend).HasMaxLength(20);
             entity.Property(l => l.EstimatedCostUsd).HasPrecision(10, 6);
+        });
+
+        modelBuilder.Entity<DraftSession>(entity =>
+        {
+            entity.Property(s => s.SourceUrl).HasMaxLength(2000);
+            entity.Property(s => s.Model).HasMaxLength(100);
         });
     }
 }

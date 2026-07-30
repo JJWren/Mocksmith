@@ -20,4 +20,13 @@ public class DraftIteration
     public required string Model { get; set; }
     public bool IsActive { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>Model-proposed sample name, prefilled into the save dialog.</summary>
+    public string? Name { get; set; }
+
+    /// <summary>Model-proposed summary, prefilled into the save dialog.</summary>
+    public string? Summary { get; set; }
+
+    /// <summary>Model-suggested tags as a JSON string array, shown as approval chips.</summary>
+    public string? TagsJson { get; set; }
 }

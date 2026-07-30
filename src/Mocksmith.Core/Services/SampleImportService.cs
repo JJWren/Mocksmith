@@ -16,6 +16,9 @@ public class SampleImportService(
         IEnumerable<string> tags,
         string html,
         string? sourceUrl = null,
+        string? description = null,
+        string? model = null,
+        string? tokensJson = null,
         CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -35,7 +38,10 @@ public class SampleImportService(
             Id = Guid.NewGuid(),
             Name = name.Trim(),
             Summary = summary.Trim(),
+            Description = description?.Trim() ?? "",
             SourceUrl = string.IsNullOrWhiteSpace(sourceUrl) ? null : sourceUrl.Trim(),
+            Model = string.IsNullOrWhiteSpace(model) ? null : model,
+            TokensJson = tokensJson,
             HtmlFile = "",
             CreatedAt = now,
             UpdatedAt = now,

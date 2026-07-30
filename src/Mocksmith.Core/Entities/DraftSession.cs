@@ -14,6 +14,15 @@ public class DraftSession
     public DraftSessionStatus Status { get; set; }
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>The original request text; becomes Sample.Description on save.</summary>
+    public string Description { get; set; } = "";
+
+    /// <summary>Provenance URL; becomes Sample.SourceUrl on save.</summary>
+    public string? SourceUrl { get; set; }
+
+    /// <summary>Claude model used for generation and refine turns in this session.</summary>
+    public string Model { get; set; } = "";
+
     public List<DraftIteration> Iterations { get; set; } = [];
     public List<InputAsset> Assets { get; set; } = [];
 }
