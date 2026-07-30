@@ -1,5 +1,10 @@
-h1:focus {
+h1:focus:not(:focus-visible) {
     outline: none;
+}
+
+h1:focus-visible {
+    outline: 2px solid var(--ms-accent);
+    outline-offset: 4px;
 }
 
 :root {

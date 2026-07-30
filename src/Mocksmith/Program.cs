@@ -1,5 +1,7 @@
-using System.Security.Claims;
+﻿using System.Security.Claims;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -74,10 +76,18 @@ app.MapHealthChecks("/healthz").AllowAnonymous();
 app.MapPost("/auth/login", async Task<IResult> (
     HttpContext context,
     IConfiguration config,
+    IAntiforgery antiforgery,
     [FromForm] string username,
     [FromForm] string password,
     [FromForm] string? returnUrl) =>
 {
+    // The [FromForm] binding already makes UseAntiforgery reject token-less requests before this
+    // delegate runs (verified); this explicit check is defense-in-depth against binding changes.
+    if (!await IsAntiforgeryValidAsync(context, antiforgery))
+    {
+        return Results.BadRequest("Invalid antiforgery token.");
+    }
+
     var safeReturnUrl = returnUrl is ['/', ..] && !returnUrl.StartsWith("//") ? returnUrl : "/";
     if (username == config["MOCKSMITH_USERNAME"]
         && PasswordHasher.Verify(password, config["MOCKSMITH_PASSWORD_HASH"]!))
@@ -92,13 +102,21 @@ app.MapPost("/auth/login", async Task<IResult> (
     }
 
     return Results.Redirect($"/login?error=1&returnUrl={Uri.EscapeDataString(safeReturnUrl)}");
-}).AllowAnonymous();
+}).AllowAnonymous()
+  // Surface auth-endpoint 4xx directly instead of re-executing into the /not-found page.
+  .WithMetadata(new SkipStatusCodePagesAttribute());
 
-app.MapPost("/auth/logout", async (HttpContext context) =>
+app.MapPost("/auth/logout", async Task<IResult> (HttpContext context, IAntiforgery antiforgery) =>
 {
+    if (!await IsAntiforgeryValidAsync(context, antiforgery))
+    {
+        return Results.BadRequest("Invalid antiforgery token.");
+    }
+
     await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     return Results.Redirect("/login");
-});
+}).RequireAuthorization()
+  .WithMetadata(new SkipStatusCodePagesAttribute());
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
@@ -106,3 +124,16 @@ app.MapRazorComponents<App>()
     .RequireAuthorization();
 
 app.Run();
+
+static async Task<bool> IsAntiforgeryValidAsync(HttpContext context, IAntiforgery antiforgery)
+{
+    try
+    {
+        await antiforgery.ValidateRequestAsync(context);
+        return true;
+    }
+    catch (AntiforgeryValidationException)
+    {
+        return false;
+    }
+}

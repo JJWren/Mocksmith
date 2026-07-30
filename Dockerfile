@@ -1,7 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-COPY Mocksmith.slnx dotnet-tools.json ./
+COPY Mocksmith.slnx ./
+COPY .config/dotnet-tools.json .config/
 COPY src/Mocksmith/Mocksmith.csproj src/Mocksmith/
 COPY src/Mocksmith.Core/Mocksmith.Core.csproj src/Mocksmith.Core/
 COPY tests/Mocksmith.Tests/Mocksmith.Tests.csproj tests/Mocksmith.Tests/
