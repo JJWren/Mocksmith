@@ -56,6 +56,8 @@ public class UsageService(IDbContextFactory<MocksmithDbContext> contextFactory, 
                 g.Sum(r => (long)r.OutputTokens),
                 g.Sum(r => r.EstimatedCostUsd ?? 0m)))
             .OrderByDescending(m => m.Calls)
+            .ThenBy(m => m.Model, StringComparer.Ordinal)
+            .ThenBy(m => m.Backend, StringComparer.Ordinal)
             .ToList();
 
         return (totals, byModel);
