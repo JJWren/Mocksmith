@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/JJWren/Mocksmith/compare/v1.5.0...v1.6.0) (2026-07-30)
+
+
+### Features
+
+* handoff bundles with design briefs and agent prompts ([#23](https://github.com/JJWren/Mocksmith/issues/23)) ([ecb4072](https://github.com/JJWren/Mocksmith/commit/ecb40722ac25b8ce01e7082479cbfe1eecdf4587))
+
 ## [1.5.0](https://github.com/JJWren/Mocksmith/compare/v1.4.0...v1.5.0) (2026-07-30)
 
 
