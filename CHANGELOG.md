@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/JJWren/Mocksmith/compare/v1.3.0...v1.4.0) (2026-07-30)
+
+
+### Features
+
+* named variants with upsert saves and dashboard grouping ([#19](https://github.com/JJWren/Mocksmith/issues/19)) ([ddc9f88](https://github.com/JJWren/Mocksmith/commit/ddc9f8841ad140cf1ab2e231b087fd5fe8787385))
+
 ## [1.3.0](https://github.com/JJWren/Mocksmith/compare/v1.2.0...v1.3.0) (2026-07-30)
 
 
