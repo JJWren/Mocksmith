@@ -7,8 +7,8 @@ on:
     branches: [master]
 
 jobs:
-  build:
-    name: Build & Test
+  build-test:
+    name: build-test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,3 +33,27 @@ jobs:
       - name: Test
         if: hashFiles('**/*.sln') != ''
         run: dotnet test --configuration Release --no-build --verbosity normal
+
+  pr-title:
+    name: pr-title
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      # Squash merges use the PR title as the commit on master, and release-please
+      # derives versions from those commits — so titles must be conventional.
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            chore
+            docs
+            refactor
+            test
+            ci
+            perf
+            build
