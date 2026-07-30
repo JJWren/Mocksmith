@@ -1024,3 +1024,15 @@ body {
     border-radius: 0.4rem;
     font-size: 0.9rem;
 }
+
+.tile-actions {
+    display: flex;
+    gap: 0.3rem;
+    flex-shrink: 0;
+}
+
+a.tile-edit {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+}

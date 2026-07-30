@@ -9,7 +9,13 @@ public class DisabledDesignGenerator : IDesignGenerator
         DesignGenerationRequest request,
         IProgress<GenerationProgress>? progress = null,
         CancellationToken ct = default)
-        => throw new InvalidOperationException(
+        => throw NotConfigured();
+
+    public Task<BriefResult> GenerateBriefAsync(BriefRequest request, CancellationToken ct = default)
+        => throw NotConfigured();
+
+    private static InvalidOperationException NotConfigured()
+        => new(
             "No generation backend is configured. Set ANTHROPIC_API_KEY (API) or "
             + "CLAUDE_CODE_OAUTH_TOKEN / install the claude CLI (subscription), "
             + "or set MOCKSMITH_GENERATOR explicitly.");

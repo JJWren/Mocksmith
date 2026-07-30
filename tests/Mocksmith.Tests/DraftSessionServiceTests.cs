@@ -22,6 +22,9 @@ public class DraftSessionServiceTests : IDisposable
             IProgress<GenerationProgress>? progress = null,
             CancellationToken ct = default)
             => throw new InvalidOperationException("Not used in these tests.");
+
+        public Task<BriefResult> GenerateBriefAsync(BriefRequest request, CancellationToken ct = default)
+            => throw new InvalidOperationException("Not used in these tests.");
     }
 
     public DraftSessionServiceTests()

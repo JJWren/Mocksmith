@@ -21,7 +21,7 @@ Tracked as GitHub issues; sequence respects dependencies (M1 → M2 → M3 → M
 - [x] M4 — Edit panel (bridge injection, click-to-select, rule-level patches, bake-on-save, saved-sample workspace entry) — PR #17
 - [x] M5 — Variants (fork, save modes with name-upsert, dashboard grouping, variant workspace) — PR #19
 - [x] M6 — Collections (tag-query parser, live membership, include/exclude pins, dashboard strip + detail) — PR #21
-- [ ] M7 — Handoff (zip bundle, design brief, agent prompt)
+- [x] M7 — Handoff (zip bundle, AI + template briefs, copy-as-agent-prompt, variant export) — PR #23
 - [ ] M8 — Polish (cost view, docs, release hygiene)
 
 ## 🟡 OPERATIONS PHASE — placeholder

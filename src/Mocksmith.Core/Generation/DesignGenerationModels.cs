@@ -40,6 +40,12 @@ public record DesignGenerationResult
 
 public record GenerationProgress(string Phase, int OutputTokensSoFar = 0);
 
+/// <summary>Inputs for an AI-written design brief.</summary>
+public record BriefRequest(string Html, string Name, string Summary, string Description, IReadOnlyList<string> Tags, string Model);
+
+/// <summary>Token/cost accounting for a brief call, logged like any generation.</summary>
+public record BriefResult(string Markdown, int InputTokens, int OutputTokens, decimal? EstimatedCostUsd, long DurationMs);
+
 public interface IDesignGenerator
 {
     /// <summary>"api" or "claude-code" — surfaced in the UI and logs.</summary>
@@ -49,4 +55,7 @@ public interface IDesignGenerator
         DesignGenerationRequest request,
         IProgress<GenerationProgress>? progress = null,
         CancellationToken ct = default);
+
+    /// <summary>Writes a handoff design brief (markdown) for an existing sample.</summary>
+    Task<BriefResult> GenerateBriefAsync(BriefRequest request, CancellationToken ct = default);
 }

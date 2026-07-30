@@ -49,6 +49,25 @@ public static class DesignPromptBuilder
         {"type":"object","properties":{"name":{"type":"string"},"summary":{"type":"string"},"tags":{"type":"array","items":{"type":"string"}},"html":{"type":"string"}},"required":["name","summary","tags","html"],"additionalProperties":false}
         """;
 
+    public static string BuildBriefPrompt(BriefRequest request) =>
+        $"""
+        Write a design-brief.md for handing this web design sample to a designer or a coding
+        agent. Cover, with concrete values taken from the sample: style summary and mood;
+        typography (families, scale, weights); color palette (token names, values, usage);
+        spacing and layout system; component inventory (what the page demonstrates);
+        interaction notes (hover/focus/JS behaviors); provenance and intent; and how to apply
+        the design tokens when implementing a real application.
+        Respond with ONLY the markdown document — no preamble, no code fences around the whole document.
+
+        Sample name: {request.Name}
+        Summary: {request.Summary}
+        Original intent: {request.Description}
+        Tags: {string.Join(", ", request.Tags)}
+
+        Sample HTML:
+        {request.Html}
+        """;
+
     public static string BuildUserText(DesignGenerationRequest request)
     {
         var builder = new StringBuilder();

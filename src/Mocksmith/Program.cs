@@ -64,6 +64,7 @@ builder.Services.AddSingleton<IDesignGenerator>(services => generationBackend sw
 });
 builder.Services.AddScoped<DraftSessionService>();
 builder.Services.AddScoped<CollectionService>();
+builder.Services.AddScoped<HandoffService>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
@@ -124,6 +125,24 @@ app.MapGet("/samples/{id:guid}/file", async Task<IResult> (
         "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:;";
     var html = await files.ReadTextAsync(sample.HtmlFile);
     return Results.Content(html, "text/html");
+}).RequireAuthorization()
+  .WithMetadata(new SkipStatusCodePagesAttribute());
+
+// Handoff bundle download: zip with sample.html, tokens, brief, metadata, screenshots.
+app.MapGet("/samples/{id:guid}/export", async Task<IResult> (
+    Guid id,
+    [FromQuery] Guid? variantId,
+    HandoffService handoff) =>
+{
+    try
+    {
+        var (content, fileName) = await handoff.BuildBundleAsync(id, variantId);
+        return Results.File(content, "application/zip", fileName);
+    }
+    catch (InvalidOperationException)
+    {
+        return Results.NotFound();
+    }
 }).RequireAuthorization()
   .WithMetadata(new SkipStatusCodePagesAttribute());
 
