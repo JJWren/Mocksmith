@@ -148,6 +148,11 @@ public class DraftSessionService(
         IEnumerable<string> tags,
         CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            throw new ArgumentException("A sample name is required.", nameof(name));
+        }
+
         var session = await GetSessionAsync(sessionId, ct)
             ?? throw new InvalidOperationException($"Session {sessionId} not found.");
         var originId = session.SourceSampleId
@@ -177,10 +182,12 @@ public class DraftSessionService(
             sample.SampleTags.Add(new SampleTag { SampleId = sample.Id, Tag = tag });
         }
 
+        await db.SaveChangesAsync(ct);
+
+        // Only mark the session saved once the overwrite has actually committed.
         await db.DraftSessions
             .Where(s => s.Id == sessionId)
             .ExecuteUpdateAsync(setters => setters.SetProperty(s => s.Status, DraftSessionStatus.Saved), ct);
-        await db.SaveChangesAsync(ct);
         return sample;
     }
 
@@ -212,6 +219,7 @@ public class DraftSessionService(
 
         await using var db = await contextFactory.CreateDbContextAsync(ct);
         var variant = await db.Variants.FirstOrDefaultAsync(v => v.SampleId == originId && v.Name == trimmedName, ct);
+        var created = variant is null;
         if (variant is null)
         {
             variant = new Variant
@@ -233,7 +241,16 @@ public class DraftSessionService(
 
         variant.PatchJson = DesignPatch.ExtractExistingCss(html);
         await fileStore.WriteTextAsync(variant.HtmlFile, html, ct);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch when (created)
+        {
+            // Compensate the file write for a variant row that never committed.
+            fileStore.TryDelete(variant.HtmlFile);
+            throw;
+        }
         await db.DraftSessions
             .Where(s => s.Id == sessionId)
             .ExecuteUpdateAsync(setters => setters.SetProperty(s => s.Status, DraftSessionStatus.Saved), ct);
