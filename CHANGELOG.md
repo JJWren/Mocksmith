@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/JJWren/Mocksmith/compare/v1.2.0...v1.3.0) (2026-07-30)
+
+
+### Features
+
+* direct-edit panel with rule-level patches and live preview bridge ([#17](https://github.com/JJWren/Mocksmith/issues/17)) ([8733c81](https://github.com/JJWren/Mocksmith/commit/8733c81d3406452db37b478ccfa1856fb9ae5c72))
+
 ## [1.2.0](https://github.com/JJWren/Mocksmith/compare/v1.1.0...v1.2.0) (2026-07-30)
 
 
