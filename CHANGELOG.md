@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.0](https://github.com/JJWren/Mocksmith/compare/v1.0.0...v0.1.0) (2026-07-30)
+
+
+### Miscellaneous Chores
+
+* set next release version to 0.1.0 ([51db3c8](https://github.com/JJWren/Mocksmith/commit/51db3c824a1b950fa3e115384c72710bdb4c68ad))
+
 ## 1.0.0 (2026-07-30)
 
 
