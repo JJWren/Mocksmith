@@ -3,10 +3,12 @@
 @using Mocksmith.Core.Services
 @inject SampleQueryService Queries
 @inject DraftSessionService Sessions
+@inject DraftGenerationCoordinator Coordinator
 @inject CollectionService Collections
 @inject HandoffService Handoff
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@implements IDisposable
 
 <PageTitle>Mocksmith — Dashboard</PageTitle>
 
@@ -22,6 +24,33 @@
                 </a>
             }
             <a class="collection-card collection-card-new" href="/collections">+ collection</a>
+        </div>
+    }
+
+    @if (_drafts.Count > 0)
+    {
+        <div class="draft-strip">
+            <h2 class="draft-strip-title muted">Open drafts</h2>
+            <div class="draft-cards">
+                @foreach (var draft in _drafts)
+                {
+                    var running = Coordinator.GetState(draft.Id)?.Running == true;
+                    <div class="draft-card" @key="draft.Id">
+                        <a class="draft-link" href="/sessions/@draft.Id">
+                            <span class="draft-desc">@Truncate(draft.Description, 90)</span>
+                            <span class="muted draft-meta">
+                                @draft.CreatedAt.ToString("MMM d, HH:mm") ·
+                                @(running
+                                    ? "generating…"
+                                    : $"{draft.Iterations.Count} iteration{(draft.Iterations.Count == 1 ? "" : "s")}")
+                            </span>
+                        </a>
+                        <button type="button" class="tile-edit" title="Delete draft"
+                                disabled="@running"
+                                @onclick="() => DeleteDraftAsync(draft.Id)">Delete</button>
+                    </div>
+                }
+            </div>
         </div>
     }
 
@@ -151,13 +180,59 @@
     private bool _filtered => !string.IsNullOrWhiteSpace(_searchText) || _selectedTags.Count > 0;
 
     private List<CollectionWithCount> _collections = [];
+    private List<DraftSession> _drafts = [];
+    private bool _disposed;
 
     protected override async Task OnInitializedAsync()
     {
+        Coordinator.Changed += OnRunsChanged;
         _allTags = await Queries.GetAllTagsAsync();
         _collections = await Collections.GetAllWithCountsAsync();
+        _drafts = await Sessions.GetOpenSessionsAsync();
         await RefreshAsync();
     }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        Coordinator.Changed -= OnRunsChanged;
+    }
+
+    private void OnRunsChanged(Guid sessionId)
+    {
+        if (_disposed || !_drafts.Any(d => d.Id == sessionId))
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _drafts = await Sessions.GetOpenSessionsAsync();
+            StateHasChanged();
+        });
+    }
+
+    private async Task DeleteDraftAsync(Guid sessionId)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm", "Delete this draft and its iterations?");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        await Sessions.DeleteSessionAsync(sessionId);
+        _drafts = await Sessions.GetOpenSessionsAsync();
+    }
+
+    private static string Truncate(string value, int max)
+        => string.IsNullOrWhiteSpace(value)
+            ? "(no description)"
+            : value.Length <= max ? value : value[..max].TrimEnd() + "…";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

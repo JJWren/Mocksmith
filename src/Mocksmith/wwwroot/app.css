@@ -905,6 +905,95 @@ body {
     color: var(--ms-muted);
 }
 
+.draft-strip {
+    margin-bottom: 1.25rem;
+}
+
+.draft-strip-title {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.draft-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+}
+
+.draft-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.9rem;
+    background: var(--ms-surface);
+    border: 1px dashed #3a3a42;
+    border-radius: 0.5rem;
+    max-width: 26rem;
+}
+
+.draft-card:hover {
+    border-color: var(--ms-accent);
+}
+
+.draft-link {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    color: var(--ms-text);
+    text-decoration: none;
+    min-width: 0;
+}
+
+.draft-desc {
+    font-size: 0.9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.draft-meta {
+    font-size: 0.8rem;
+}
+
+.status-hint {
+    margin: 0.25rem 0 0;
+    font-size: 0.8rem;
+}
+
+.workspace-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.9rem;
+    flex: 1;
+    border: 1px dashed #3a3a42;
+    border-radius: 0.5rem;
+    padding: 2rem;
+}
+
+.retry-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.retry-row select {
+    margin-left: 0.4rem;
+}
+
+.retry-row button {
+    padding: 0.45rem 1rem;
+    border: none;
+    border-radius: 0.4rem;
+    background: var(--ms-accent);
+    color: #1a1208;
+    font-weight: 600;
+    cursor: pointer;
+}
+
 .collections-page {
     max-width: 50rem;
     margin: 0 auto;

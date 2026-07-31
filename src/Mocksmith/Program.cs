@@ -66,6 +66,8 @@ builder.Services.AddScoped<DraftSessionService>();
 builder.Services.AddScoped<CollectionService>();
 builder.Services.AddScoped<HandoffService>();
 builder.Services.AddScoped<UsageService>();
+// Singleton: generation runs must outlive the circuit that started them.
+builder.Services.AddSingleton<DraftGenerationCoordinator>();
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

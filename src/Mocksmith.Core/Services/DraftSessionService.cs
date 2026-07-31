@@ -317,6 +317,50 @@ public class DraftSessionService(
             .FirstOrDefaultAsync(s => s.Id == sessionId, ct);
     }
 
+    /// <summary>Unsaved sessions, newest first — the dashboard's open-drafts strip.</summary>
+    public async Task<List<DraftSession>> GetOpenSessionsAsync(CancellationToken ct = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        return await db.DraftSessions
+            .AsNoTracking()
+            .Where(s => s.Status == DraftSessionStatus.Active)
+            .Include(s => s.Iterations)
+            .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync(ct);
+    }
+
+    /// <summary>
+    /// Hard-deletes a draft session: iteration files, draft-only asset rows/files, then the
+    /// session row (iterations cascade). Assets promoted onto a saved sample keep their file
+    /// and row — they are that sample's provenance now.
+    /// </summary>
+    public async Task DeleteSessionAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync(ct);
+        var session = await db.DraftSessions
+            .Include(s => s.Iterations)
+            .Include(s => s.Assets)
+            .FirstOrDefaultAsync(s => s.Id == sessionId, ct);
+        if (session is null)
+        {
+            return;
+        }
+
+        foreach (var iteration in session.Iterations)
+        {
+            fileStore.TryDelete(iteration.HtmlFile);
+        }
+
+        foreach (var asset in session.Assets.Where(a => a.SampleId is null))
+        {
+            fileStore.TryDelete(asset.FilePath);
+        }
+
+        db.InputAssets.RemoveRange(session.Assets.Where(a => a.SampleId is null));
+        db.DraftSessions.Remove(session);
+        await db.SaveChangesAsync(ct);
+    }
+
     /// <summary>Runs the initial fan-out; candidates share a CandidateGroup.</summary>
     public async Task GenerateCandidatesAsync(
         Guid sessionId,
