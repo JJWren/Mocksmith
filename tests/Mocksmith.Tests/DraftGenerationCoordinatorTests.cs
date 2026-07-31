@@ -86,6 +86,10 @@ public class DraftGenerationCoordinatorTests : IDisposable
             new SampleImportService(_factory, fileStore, TimeProvider.System), TimeProvider.System);
     }
 
+    /// <summary>Finished = evicted on success, or a retained terminal error/cancel state.</summary>
+    private bool RunFinished(Guid sessionId)
+        => _coordinator.GetState(sessionId) is null or { Running: false };
+
     private static async Task WaitForAsync(Func<bool> condition, int timeoutMs = 10_000)
     {
         var deadline = Environment.TickCount64 + timeoutMs;
@@ -114,11 +118,10 @@ public class DraftGenerationCoordinatorTests : IDisposable
         Assert.Contains("candidate 1", _coordinator.GetState(session.Id)!.Phase);
 
         _generator.Release();
-        await WaitForAsync(() => _coordinator.GetState(session.Id) is { Running: false });
+        await WaitForAsync(() => RunFinished(session.Id));
 
-        var state = _coordinator.GetState(session.Id)!;
-        Assert.Null(state.Error);
-        Assert.False(state.Cancelled);
+        // Successful runs evict their state; only error/cancel states are retained.
+        Assert.Null(_coordinator.GetState(session.Id));
 
         var loaded = await _service.GetSessionAsync(session.Id);
         var iteration = Assert.Single(loaded!.Iterations);
@@ -150,11 +153,11 @@ public class DraftGenerationCoordinatorTests : IDisposable
         Assert.False(_coordinator.TryStartRefine(session.Id, "darker"));
 
         _generator.Release();
-        await WaitForAsync(() => _coordinator.GetState(session.Id) is { Running: false });
+        await WaitForAsync(() => RunFinished(session.Id));
 
         // Gate already open, so this second run completes immediately.
         Assert.True(_coordinator.TryStartCandidates(session.Id, 1));
-        await WaitForAsync(() => _coordinator.GetState(session.Id) is { Running: false });
+        await WaitForAsync(() => RunFinished(session.Id));
         Assert.Equal(2, (await _service.GetSessionAsync(session.Id))!.Iterations.Count);
     }
 
@@ -169,9 +172,9 @@ public class DraftGenerationCoordinatorTests : IDisposable
 
         Assert.True(_coordinator.TryStartRefine(session.Id, "darker"));
         _generator.Release();
-        await WaitForAsync(() => _coordinator.GetState(session.Id) is { Running: false });
+        await WaitForAsync(() => RunFinished(session.Id));
 
-        Assert.Null(_coordinator.GetState(session.Id)!.Error);
+        Assert.Null(_coordinator.GetState(session.Id));
         var loaded = await _service.GetSessionAsync(session.Id);
         Assert.Equal(2, loaded!.Iterations.Count);
         var active = Assert.Single(loaded.Iterations, i => i.IsActive);
@@ -186,9 +189,9 @@ public class DraftGenerationCoordinatorTests : IDisposable
 
         Assert.True(_coordinator.TryStartCandidates(session.Id, 1));
         _generator.Release();
-        await WaitForAsync(() => _coordinator.GetState(session.Id) is { Running: false });
+        await WaitForAsync(() => RunFinished(session.Id));
 
-        Assert.Null(_coordinator.GetState(session.Id)!.Error);
+        Assert.Null(_coordinator.GetState(session.Id));
         Assert.Single((await _service.GetSessionAsync(session.Id))!.Iterations);
     }
 

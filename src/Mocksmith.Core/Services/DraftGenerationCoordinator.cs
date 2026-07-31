@@ -33,6 +33,16 @@ public class DraftGenerationCoordinator(
         public object Sync { get; } = new();
     }
 
+    /// <summary>
+    /// Dispatches synchronously on the reporting thread. Progress&lt;T&gt; would capture the
+    /// ambient SynchronizationContext — the Blazor circuit's when a start originates from a UI
+    /// event — re-coupling the run to the circuit this coordinator exists to outlive.
+    /// </summary>
+    private sealed class DirectProgress(Action<GenerationProgress> callback) : IProgress<GenerationProgress>
+    {
+        public void Report(GenerationProgress value) => callback(value);
+    }
+
     private readonly ConcurrentDictionary<Guid, Run> _runs = new();
 
     /// <summary>Fired after every state transition with the affected session id (thread-pool thread).</summary>
@@ -114,10 +124,9 @@ public class DraftGenerationCoordinator(
         }
 
         var ct = cts.Token;
-        // Constructed without an ambient SynchronizationContext, so callbacks arrive on the
-        // thread pool. Mutations target this run instance directly: a straggler callback from
-        // a finished run can only touch its own orphaned state, never a newer run's.
-        var progress = new Progress<GenerationProgress>(p =>
+        // Mutations target this run instance directly: a straggler callback from a finished
+        // run can only touch its own orphaned state, never a newer run's.
+        var progress = new DirectProgress(p =>
             Update(run, sessionId, s => s with
             {
                 Phase = p.Phase + (p.OutputTokensSoFar > 0 ? $" (~{p.OutputTokensSoFar} tokens)" : ""),
@@ -131,6 +140,10 @@ public class DraftGenerationCoordinator(
                 var sessions = scope.ServiceProvider.GetRequiredService<DraftSessionService>();
                 await work(sessions, progress, ct);
                 Update(run, sessionId, s => s with { Running = false, Phase = null });
+                // Success needs no notice, so drop the state immediately — a long-lived
+                // singleton must not retain per-session entries forever. Error/cancel states
+                // stay until the UI dismisses them via ClearTerminal.
+                _runs.TryRemove(new KeyValuePair<Guid, Run>(sessionId, run));
             }
             catch (OperationCanceledException)
             {
