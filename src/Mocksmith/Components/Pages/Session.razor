@@ -552,7 +552,12 @@ else
     private void StartCandidates(int fanOut)
     {
         _error = null;
-        Coordinator.TryStartCandidates(SessionId, Math.Clamp(fanOut, 1, 3));
+        if (!Coordinator.TryStartCandidates(SessionId, Math.Clamp(fanOut, 1, 3)))
+        {
+            _error = "A generation run is already in progress for this session.";
+            return;
+        }
+
         _wasRunning = true;
     }
 
@@ -569,10 +574,15 @@ else
 
     private void StartRefine()
     {
-        var instruction = _refineText;
-        _refineText = "";
         _error = null;
-        Coordinator.TryStartRefine(SessionId, instruction);
+        if (!Coordinator.TryStartRefine(SessionId, _refineText))
+        {
+            // Keep the instruction text so it isn't lost to a rejected start.
+            _error = "A generation run is already in progress for this session.";
+            return;
+        }
+
+        _refineText = "";
         _wasRunning = true;
     }
 

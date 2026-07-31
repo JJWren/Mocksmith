@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Mocksmith.Core.Generation;
 
 namespace Mocksmith.Core.Services;
@@ -20,7 +21,10 @@ public sealed record GenerationRunState(
 /// cancellation is an explicit user action, never a navigation side effect. Each run
 /// executes inside its own DI scope so scoped services never outlive their circuit.
 /// </summary>
-public class DraftGenerationCoordinator(IServiceScopeFactory scopeFactory, TimeProvider timeProvider)
+public class DraftGenerationCoordinator(
+    IServiceScopeFactory scopeFactory,
+    TimeProvider timeProvider,
+    ILogger<DraftGenerationCoordinator>? logger = null)
 {
     private sealed class Run
     {
@@ -146,7 +150,7 @@ public class DraftGenerationCoordinator(IServiceScopeFactory scopeFactory, TimeP
             }
         });
 
-        Changed?.Invoke(sessionId);
+        RaiseChanged(sessionId);
         return true;
     }
 
@@ -157,6 +161,31 @@ public class DraftGenerationCoordinator(IServiceScopeFactory scopeFactory, TimeP
             run.State = mutate(run.State);
         }
 
-        Changed?.Invoke(sessionId);
+        RaiseChanged(sessionId);
+    }
+
+    /// <summary>
+    /// Invokes subscribers one by one, isolating failures: Changed fires from thread-pool
+    /// callbacks, where an unhandled subscriber exception would crash the process and take
+    /// coordinator-owned background work with it.
+    /// </summary>
+    private void RaiseChanged(Guid sessionId)
+    {
+        if (Changed is not { } handlers)
+        {
+            return;
+        }
+
+        foreach (var handler in handlers.GetInvocationList().Cast<Action<Guid>>())
+        {
+            try
+            {
+                handler(sessionId);
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Generation state subscriber threw for session {SessionId}.", sessionId);
+            }
+        }
     }
 }

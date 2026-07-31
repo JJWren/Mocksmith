@@ -181,6 +181,7 @@
 
     private List<CollectionWithCount> _collections = [];
     private List<DraftSession> _drafts = [];
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, bool> _draftRunning = new();
     private bool _disposed;
 
     protected override async Task OnInitializedAsync()
@@ -205,6 +206,15 @@
             return;
         }
 
+        // The strip only shows whether a run exists, so progress ticks (which also raise
+        // Changed) are ignored; we react — and hit the DB — only on start/finish transitions.
+        var running = Coordinator.GetState(sessionId)?.Running == true;
+        if (running == _draftRunning.GetValueOrDefault(sessionId))
+        {
+            return;
+        }
+
+        _draftRunning[sessionId] = running;
         _ = InvokeAsync(async () =>
         {
             if (_disposed)
@@ -212,7 +222,12 @@
                 return;
             }
 
-            _drafts = await Sessions.GetOpenSessionsAsync();
+            if (!running)
+            {
+                // A run just finished — iteration counts changed.
+                _drafts = await Sessions.GetOpenSessionsAsync();
+            }
+
             StateHasChanged();
         });
     }

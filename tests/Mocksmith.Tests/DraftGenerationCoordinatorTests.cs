@@ -179,6 +179,20 @@ public class DraftGenerationCoordinatorTests : IDisposable
     }
 
     [Fact]
+    public async Task ThrowingSubscriber_DoesNotBreakTheRun()
+    {
+        var session = await _service.StartSessionAsync("desc", null, "claude-sonnet-5", []);
+        _coordinator.Changed += _ => throw new InvalidOperationException("bad subscriber");
+
+        Assert.True(_coordinator.TryStartCandidates(session.Id, 1));
+        _generator.Release();
+        await WaitForAsync(() => _coordinator.GetState(session.Id) is { Running: false });
+
+        Assert.Null(_coordinator.GetState(session.Id)!.Error);
+        Assert.Single((await _service.GetSessionAsync(session.Id))!.Iterations);
+    }
+
+    [Fact]
     public async Task GeneratorFailure_SurfacesErrorState()
     {
         var session = await _service.StartSessionAsync("desc", null, "claude-sonnet-5", []);
