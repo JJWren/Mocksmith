@@ -51,3 +51,19 @@
 **Context**: Workflow Planning — approved; Construction pending (issue-driven PRs)
 
 ---
+
+## Post-v1 — GHCR Image Publishing
+**Timestamp**: 2026-07-31T01:49:21Z
+**User Input**: "what creates the packages?" → "No I mean the github packages - similar to calcrony" → "yes, file it and run it through the gate"
+**AI Response**: Identified CalCrony's `publish-images` job inside `release-please.yml` as what creates its GHCR packages; filed issue #27 and mirrored the pattern for Mocksmith (publish `ghcr.io/jjwren/mocksmith` + `ghcr.io/jjwren/mocksmith-full` on each release), delivered via PR through the review gate.
+**Context**: Operations phase — release image publishing
+
+---
+
+## Operations — Home-Lab Deployment Guide Request
+**Timestamp**: 2026-07-31T01:52:00Z
+**User Input**: "Give me a start to finish guide for setting this up (docker-compose.yml and .env in Z:\docker\mocksmith and the steps to link my claude code with the app as I plan on using that and not the anthropic api key)"
+**AI Response**: Produced a start-to-finish home-lab deployment guide (Z:\docker\mocksmith compose + .env, `claude setup-token` linkage for the subscription backend, NPM proxy host with WebSockets, backup/update procedures), delivered alongside the GHCR publishing PR that makes the no-clone deploy possible.
+**Context**: Operations phase — home-lab deployment (behind Nginx Proxy Manager)
+
+---
