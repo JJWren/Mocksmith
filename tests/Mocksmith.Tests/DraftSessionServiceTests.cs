@@ -210,6 +210,99 @@ public class DraftSessionServiceTests : IDisposable
         Assert.Contains("color: teal", await _fileStore.ReadTextAsync(seeded.HtmlFile));
     }
 
+    [Fact]
+    public async Task GetOpenSessions_ReturnsActiveOnly_NewestFirst()
+    {
+        var older = await _service.StartSessionAsync("first draft", null, "claude-sonnet-5", []);
+        var newer = await _service.StartSessionAsync("second draft", null, "claude-sonnet-5", []);
+
+        await using (var db = _factory.CreateDbContext())
+        {
+            await db.DraftSessions
+                .Where(s => s.Id == older.Id)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(s => s.CreatedAt, DateTime.UtcNow.AddMinutes(-5)));
+        }
+
+        var open = await _service.GetOpenSessionsAsync();
+        Assert.Equal([newer.Id, older.Id], open.Select(s => s.Id));
+
+        await using (var db = _factory.CreateDbContext())
+        {
+            await db.DraftSessions
+                .Where(s => s.Id == newer.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(s => s.Status, DraftSessionStatus.Saved));
+        }
+
+        Assert.Equal([older.Id], (await _service.GetOpenSessionsAsync()).Select(s => s.Id));
+    }
+
+    [Fact]
+    public async Task DeleteSession_RemovesRowsAndIterationFiles_KeepsOriginSample()
+    {
+        var sample = await _importService.ImportAsync(
+            "Origin", "", [],
+            "<!doctype html><html><head></head><body>keep me</body></html>");
+        var session = await _service.StartSessionFromSampleAsync(sample.Id);
+        var iteration = (await _service.GetSessionAsync(session.Id))!.Iterations.Single();
+        Assert.True(_fileStore.Exists(iteration.HtmlFile));
+
+        await _service.DeleteSessionAsync(session.Id);
+
+        Assert.Null(await _service.GetSessionAsync(session.Id));
+        Assert.False(_fileStore.Exists(iteration.HtmlFile));
+        await using var db = _factory.CreateDbContext();
+        Assert.Empty(db.DraftIterations.Where(i => i.DraftSessionId == session.Id));
+        Assert.NotNull(await db.Samples.FindAsync(sample.Id));
+    }
+
+    [Fact]
+    public async Task DeleteSession_DeletesDraftAssets_KeepsPromotedAssets()
+    {
+        var sample = await _importService.ImportAsync(
+            "Origin", "", [],
+            "<!doctype html><html><head></head><body>x</body></html>");
+        var session = await _service.StartSessionAsync("desc", null, "claude-sonnet-5", []);
+
+        var draftOnlyPath = "assets/draft-only.png";
+        var promotedPath = "assets/promoted.png";
+        await _fileStore.WriteTextAsync(draftOnlyPath, "png-bytes");
+        await _fileStore.WriteTextAsync(promotedPath, "png-bytes");
+        await using (var db = _factory.CreateDbContext())
+        {
+            db.InputAssets.AddRange(
+                new InputAsset
+                {
+                    Id = Guid.NewGuid(),
+                    DraftSessionId = session.Id,
+                    FileName = "draft-only.png",
+                    FilePath = draftOnlyPath,
+                    ContentType = "image/png",
+                    CreatedAt = DateTime.UtcNow,
+                },
+                new InputAsset
+                {
+                    Id = Guid.NewGuid(),
+                    DraftSessionId = session.Id,
+                    SampleId = sample.Id,
+                    FileName = "promoted.png",
+                    FilePath = promotedPath,
+                    ContentType = "image/png",
+                    CreatedAt = DateTime.UtcNow,
+                });
+            await db.SaveChangesAsync();
+        }
+
+        await _service.DeleteSessionAsync(session.Id);
+
+        Assert.False(_fileStore.Exists(draftOnlyPath));
+        Assert.True(_fileStore.Exists(promotedPath));
+        await using var checkDb = _factory.CreateDbContext();
+        var remaining = Assert.Single(checkDb.InputAssets);
+        Assert.Equal(sample.Id, remaining.SampleId);
+        Assert.Null(remaining.DraftSessionId);
+    }
+
     public void Dispose()
     {
         _factory.Dispose();

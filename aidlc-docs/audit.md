@@ -75,3 +75,11 @@
 **Context**: Operations phase — production bug fix + UX resilience feature, both via gated PRs
 
 ---
+
+## Operations — Session Resilience Implementation (#31)
+**Timestamp**: 2026-07-31T03:12:00Z
+**User Input**: (approval carried from the combined message logged above: "yes, file it and run it through the gate.")
+**AI Response**: Implemented issue #31: DraftGenerationCoordinator singleton owns generation/refine runs in their own DI scopes so they survive circuit teardown; Session workspace re-attaches via state polling + Changed event, gains explicit Cancel, a background-run hint, terminal error/cancel notices, and an empty-session Generate retry panel; dashboard gains an open-drafts strip with live generating badges and guarded delete (DeleteSessionAsync preserves assets promoted onto saved samples). 129 tests.
+**Context**: Operations phase — resilience feature via gated PR
+
+---

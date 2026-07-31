@@ -6,6 +6,7 @@
 @using Mocksmith.Core.Generation
 @using Mocksmith.Core.Services
 @inject DraftSessionService Sessions
+@inject DraftGenerationCoordinator Coordinator
 @inject IDbContextFactory<MocksmithDbContext> ContextFactory
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -22,7 +23,7 @@ else
     <div class="session-page">
         <aside class="session-sidebar">
             <h2>Iterations</h2>
-            @if (_session.Iterations.Count == 0 && !_generating)
+            @if (_session.Iterations.Count == 0 && !IsGenerating)
             {
                 <p class="muted">None yet.</p>
             }
@@ -58,27 +59,36 @@ else
                        placeholder="Refine: e.g. darker header, more whitespace, serif headings…"
                        @bind="_refineText"
                        @bind:event="oninput"
-                       disabled="@(_generating || _selectedId is null)" />
-                <button type="button" @onclick="RefineAsync" disabled="@(_generating || _selectedId is null || string.IsNullOrWhiteSpace(_refineText))">
+                       disabled="@(IsGenerating || _selectedId is null)" />
+                <button type="button" @onclick="StartRefine" disabled="@(IsGenerating || _selectedId is null || string.IsNullOrWhiteSpace(_refineText))">
                     Refine
                 </button>
                 <button type="button"
                         class="@(_editMode ? "edit-toggle-on" : "")"
                         @onclick="ToggleEditModeAsync"
-                        disabled="@(_generating || _selectedId is null)">
+                        disabled="@(IsGenerating || _selectedId is null)">
                     @(_editMode ? "Exit edit" : "Edit elements")
                 </button>
-                <button type="button" class="save-button" @onclick="OpenSaveDialog" disabled="@(_generating || _selectedId is null)">
+                <button type="button" class="save-button" @onclick="OpenSaveDialog" disabled="@(IsGenerating || _selectedId is null)">
                     Save as sample…
                 </button>
             </div>
 
-            @if (_generating)
+            @if (IsGenerating)
             {
                 <div class="generation-status">
                     <div class="spinner"></div>
-                    <span>@(_phase ?? "generating…") · @(_elapsed)s</span>
+                    <span>@(PhaseText ?? "generating…") · @(ElapsedSeconds)s</span>
+                    <button type="button" class="link-button" @onclick="CancelGeneration">Cancel</button>
                 </div>
+                <p class="muted status-hint">Runs continue in the background — leaving this page won't stop them.</p>
+            }
+            else if (RunState is { } finished && (finished.Error is not null || finished.Cancelled))
+            {
+                <p class="form-error" role="alert">
+                    @(finished.Error ?? "Generation cancelled — nothing was kept.")
+                    <button type="button" class="link-button" @onclick="DismissRunNotice">Dismiss</button>
+                </p>
             }
             @if (_error is not null)
             {
@@ -93,6 +103,23 @@ else
                                 title="Draft preview"
                                 src="/sessions/@SessionId/iterations/@selected/file@(_editMode ? "?bridge=true" : "")"
                                 sandbox="allow-scripts"></iframe>
+                    </div>
+                }
+                else if (!IsGenerating)
+                {
+                    <div class="workspace-empty">
+                        <p class="muted">No candidates yet.</p>
+                        <div class="retry-row">
+                            <label>
+                                Candidates
+                                <select @bind="_retryFanout">
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                </select>
+                            </label>
+                            <button type="button" @onclick="() => StartCandidates(_retryFanout)">Generate</button>
+                        </div>
                     </div>
                 }
 
@@ -154,7 +181,7 @@ else
 
                         <div class="panel-actions">
                             <button type="button" class="link-button" @onclick="ResetEditsAsync" disabled="@_patch.IsEmpty">Reset edits</button>
-                            <button type="button" @onclick="ApplyEditsAsync" disabled="@(_patch.IsEmpty || _generating)">Apply as new iteration</button>
+                            <button type="button" @onclick="ApplyEditsAsync" disabled="@(_patch.IsEmpty || IsGenerating)">Apply as new iteration</button>
                         </div>
                     </aside>
                 }
@@ -254,14 +281,19 @@ else
     private DraftSession? _session;
     private bool _loaded;
     private Guid? _selectedId;
-    private bool _generating;
-    private string? _phase;
-    private int _elapsed;
     private string? _error;
     private string _refineText = "";
     private System.Timers.Timer? _elapsedTimer;
-    private CancellationTokenSource? _workCts;
     private bool _disposed;
+    private bool _wasRunning;
+    private int _retryFanout = 1;
+
+    private GenerationRunState? RunState => Coordinator.GetState(SessionId);
+    private bool IsGenerating => RunState?.Running == true;
+    private string? PhaseText => RunState?.Phase;
+    private int ElapsedSeconds => RunState is { Running: true } state
+        ? Math.Max(0, (int)(DateTime.UtcNow - state.StartedAtUtc).TotalSeconds)
+        : 0;
 
     private bool _editMode;
     private BridgeSelection? _selection;
@@ -284,8 +316,47 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        Coordinator.Changed += OnCoordinatorChanged;
         await ReloadAsync();
+        _wasRunning = IsGenerating;
+        _retryFanout = Math.Clamp(Fanout ?? 1, 1, 3);
+        // Display-only tick for the elapsed counter while a run is in flight.
+        _elapsedTimer = new System.Timers.Timer(1000);
+        _elapsedTimer.Elapsed += (_, _) =>
+        {
+            if (!_disposed && IsGenerating)
+            {
+                _ = InvokeAsync(StateHasChanged);
+            }
+        };
+        _elapsedTimer.Start();
         _loaded = true;
+    }
+
+    private void OnCoordinatorChanged(Guid sessionId)
+    {
+        if (sessionId != SessionId || _disposed)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            var running = IsGenerating;
+            if (_wasRunning && !running)
+            {
+                // A run just finished — pick up whatever it persisted.
+                await ReloadAsync();
+            }
+
+            _wasRunning = running;
+            StateHasChanged();
+        });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -299,10 +370,11 @@ else
         await JS.InvokeVoidAsync("mocksmithWorkspace.init", _selfReference, "workspace-frame");
 
         // OnAfterRender only fires in the interactive circuit, so the fan-out kick-off
-        // cannot double-run during prerender.
-        if (Fanout is > 0 && _session is { Iterations.Count: 0 } && !_generating)
+        // cannot double-run during prerender. RunState is null only when the coordinator
+        // has no record of this session — a revisit re-attaches instead of restarting.
+        if (Fanout is > 0 && _session is { Iterations.Count: 0 } && RunState is null)
         {
-            StartWork(ct => Sessions.GenerateCandidatesAsync(SessionId, Fanout!.Value, MakeProgress(), ct));
+            StartCandidates(Fanout.Value);
         }
     }
 
@@ -477,66 +549,21 @@ else
         }
     }
 
-    private void StartWork(Func<CancellationToken, Task> work)
+    private void StartCandidates(int fanOut)
     {
-        _generating = true;
         _error = null;
-        _elapsed = 0;
-        _workCts?.Dispose();
-        _workCts = new CancellationTokenSource();
-        var ct = _workCts.Token;
-        _elapsedTimer?.Dispose();
-        _elapsedTimer = new System.Timers.Timer(1000);
-        _elapsedTimer.Elapsed += (_, _) =>
+        if (!Coordinator.TryStartCandidates(SessionId, Math.Clamp(fanOut, 1, 3)))
         {
-            if (_disposed)
-            {
-                return;
-            }
-
-            _elapsed++;
-            _ = InvokeAsync(StateHasChanged);
-        };
-        _elapsedTimer.Start();
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                await work(ct);
-                await ReloadAsync();
-            }
-            catch (OperationCanceledException)
-            {
-                // component disposed mid-generation; nothing to surface
-            }
-            catch (Exception ex)
-            {
-                _error = ex.Message;
-            }
-            finally
-            {
-                _generating = false;
-                _phase = null;
-                _elapsedTimer?.Stop();
-                if (!_disposed)
-                {
-                    await InvokeAsync(StateHasChanged);
-                }
-            }
-        });
-    }
-
-    private Progress<GenerationProgress> MakeProgress() => new(p =>
-    {
-        if (_disposed)
-        {
+            _error = "A generation run is already in progress for this session.";
             return;
         }
 
-        _phase = p.Phase + (p.OutputTokensSoFar > 0 ? $" (~{p.OutputTokensSoFar} tokens)" : "");
-        _ = InvokeAsync(StateHasChanged);
-    });
+        _wasRunning = true;
+    }
+
+    private void CancelGeneration() => Coordinator.Cancel(SessionId);
+
+    private void DismissRunNotice() => Coordinator.ClearTerminal(SessionId);
 
     private async Task SelectAsync(Guid iterationId)
     {
@@ -545,11 +572,18 @@ else
         await Sessions.SetActiveAsync(SessionId, iterationId);
     }
 
-    private void RefineAsync()
+    private void StartRefine()
     {
-        var instruction = _refineText;
+        _error = null;
+        if (!Coordinator.TryStartRefine(SessionId, _refineText))
+        {
+            // Keep the instruction text so it isn't lost to a rejected start.
+            _error = "A generation run is already in progress for this session.";
+            return;
+        }
+
         _refineText = "";
-        StartWork(ct => Sessions.RefineAsync(SessionId, instruction, MakeProgress(), ct));
+        _wasRunning = true;
     }
 
     private void OpenSaveDialog()
@@ -620,8 +654,9 @@ else
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
-        _workCts?.Cancel();
-        _workCts?.Dispose();
+        // Deliberately no cancellation here: runs belong to the coordinator and keep
+        // going when the user navigates away. Cancel is an explicit toolbar action.
+        Coordinator.Changed -= OnCoordinatorChanged;
         _elapsedTimer?.Dispose();
         try
         {
