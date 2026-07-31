@@ -1,6 +1,6 @@
 # AI-DLC State — Mocksmith
 
-**Updated**: 2026-07-30
+**Updated**: 2026-07-31
 
 ## 🔵 INCEPTION PHASE — complete
 
@@ -24,6 +24,7 @@ Tracked as GitHub issues; sequence respects dependencies (M1 → M2 → M3 → M
 - [x] M7 — Handoff (zip bundle, AI + template briefs, copy-as-agent-prompt, variant export) — PR #23
 - [x] M8 — Polish (usage/cost view, settings page, README + verified backup drill) — PR #25
 
-## 🟡 OPERATIONS PHASE — placeholder
+## 🟡 OPERATIONS PHASE — in progress
 
-Post-v1: deploy into the home-lab compose stack behind Nginx Proxy Manager on a subdomain.
+- [x] Release image publishing — `ghcr.io/jjwren/mocksmith` + `ghcr.io/jjwren/mocksmith-full` pushed by `release-please.yml` on each release (issue #27)
+- [ ] Deploy into the home-lab compose stack behind Nginx Proxy Manager on a subdomain (guide delivered 2026-07-31; awaiting first published images)

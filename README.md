@@ -42,6 +42,42 @@ docker compose up -d --build
 
 The app listens on port 8080 and reports readiness at `/healthz`.
 
+### Run from published images (no clone needed)
+
+Each release publishes two images to GHCR, tagged with the release version and `latest`:
+
+| Image | Contents |
+|---|---|
+| `ghcr.io/jjwren/mocksmith` | Standard image — `api` backend |
+| `ghcr.io/jjwren/mocksmith-full` | Standard + Node + Claude Code CLI — enables the `claude-code` backend |
+
+```bash
+# Password hash without a checkout:
+docker run --rm ghcr.io/jjwren/mocksmith:latest hash-password 'your-password'
+```
+
+Minimal compose file (swap in `mocksmith-full`, `MOCKSMITH_GENERATOR=claude-code`, and
+`CLAUDE_CODE_OAUTH_TOKEN` for subscription-backed generation):
+
+```yaml
+services:
+  mocksmith:
+    image: ghcr.io/jjwren/mocksmith:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - MOCKSMITH_USERNAME=${MOCKSMITH_USERNAME:?}
+      - MOCKSMITH_PASSWORD_HASH=${MOCKSMITH_PASSWORD_HASH:?}
+      - ASPNETCORE_FORWARDEDHEADERS_ENABLED=true
+    volumes:
+      - ./data:/data
+```
+
+The in-repo `docker-compose.yml` keeps building from source — use it for development
+or to run unreleased changes.
+
 ### Generation backends
 
 Generation runs through one of two interchangeable backends behind `IDesignGenerator`:
