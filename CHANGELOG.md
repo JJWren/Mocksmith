@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/JJWren/Mocksmith/compare/v1.8.1...v1.9.0) (2026-07-31)
+
+
+### Features
+
+* draft generation survives navigation; open-drafts strip and session retry ([#34](https://github.com/JJWren/Mocksmith/issues/34)) ([7b2f956](https://github.com/JJWren/Mocksmith/commit/7b2f95691b2373be7923ac0f3977e5e141aaa12b))
+
 ## [1.8.1](https://github.com/JJWren/Mocksmith/compare/v1.8.0...v1.8.1) (2026-07-31)
 
 
