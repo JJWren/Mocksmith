@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/JJWren/Mocksmith/compare/v1.7.0...v1.8.0) (2026-07-31)
+
+
+### Features
+
+* publish container images to GHCR on release ([#28](https://github.com/JJWren/Mocksmith/issues/28)) ([d45de6b](https://github.com/JJWren/Mocksmith/commit/d45de6b656386f50627f1c9ab10aed44f0801eb5))
+
 ## [1.7.0](https://github.com/JJWren/Mocksmith/compare/v1.6.0...v1.7.0) (2026-07-30)
 
 
