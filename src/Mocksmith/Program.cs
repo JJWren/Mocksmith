@@ -174,7 +174,9 @@ app.MapGet("/samples/{sampleId:guid}/variants/{variantId:guid}/file", async Task
 app.MapGet("/sessions/{sessionId:guid}/iterations/{iterationId:guid}/file", async Task<IResult> (
     Guid sessionId,
     Guid iterationId,
-    [FromQuery] bool bridge,
+    // Nullable so the param is optional: a bare non-nullable bool is treated as required
+    // and requests without ?bridge= are rejected with an empty 400 before the handler runs.
+    [FromQuery] bool? bridge,
     HttpContext context,
     MocksmithDbContext db,
     SampleFileStore files) =>
@@ -189,7 +191,7 @@ app.MapGet("/sessions/{sessionId:guid}/iterations/{iterationId:guid}/file", asyn
     context.Response.Headers.ContentSecurityPolicy =
         "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; font-src data:;";
     var html = await files.ReadTextAsync(iteration.HtmlFile);
-    if (bridge)
+    if (bridge is true)
     {
         html = HtmlBridgeInjector.Inject(html);
     }

@@ -67,3 +67,11 @@
 **Context**: Operations phase — home-lab deployment (behind Nginx Proxy Manager)
 
 ---
+
+## Operations — First-Use Bug Report (blank previews) + Resilience Approval
+**Timestamp**: 2026-07-31T02:55:00Z
+**User Input**: "yes, file it and run it through the gate. Also, the generation finished and it presented me with 2 options (candidate A and B). However, both are blank white screens in the app? However, when I click edit elements, the sample(s) appear, but they go away again (blank white) when I click exit edit."
+**AI Response**: Diagnosed the blank previews (issue #30): the iteration file endpoint's non-nullable `bool bridge` query parameter is treated as required by minimal-API binding, so bare view-mode requests got an empty 400 while edit mode's `?bridge=true` rendered. Confirmed with an authenticated probe (bare 400 / bridge 404 pre-fix; both reach the handler post-fix). Filed #31 for the approved session-resilience work (generation surviving navigation, retry for empty sessions, dashboard drafts strip).
+**Context**: Operations phase — production bug fix + UX resilience feature, both via gated PRs
+
+---
