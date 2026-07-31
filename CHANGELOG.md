@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.1](https://github.com/JJWren/Mocksmith/compare/v1.8.0...v1.8.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* draft preview blank in view mode (optional bridge query param) ([#32](https://github.com/JJWren/Mocksmith/issues/32)) ([4d8daa9](https://github.com/JJWren/Mocksmith/commit/4d8daa94dfd9631d0488657920cc9c5b6f5a8e7d))
+
 ## [1.8.0](https://github.com/JJWren/Mocksmith/compare/v1.7.0...v1.8.0) (2026-07-31)
 
 
