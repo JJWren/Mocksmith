@@ -7,14 +7,15 @@ on:
   # (observed on CalCrony 2026-07-19), which silently skips the release roll.
   workflow_dispatch:
 
-permissions:
-  contents: write
-  pull-requests: write
-  packages: write
+# Least-privilege: each job declares exactly what it needs.
+permissions: {}
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       version: ${{ steps.release.outputs.version }}
@@ -33,6 +34,9 @@ jobs:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     env:
       VERSION: ${{ needs.release-please.outputs.version }}
     steps:
